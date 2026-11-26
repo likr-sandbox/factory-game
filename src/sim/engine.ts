@@ -3,7 +3,8 @@
 
 import type { WorldState, BuildingState, Tile, Direction, MaterialId, RecipeId } from "./types";
 import { RECIPE_CATALOG } from "./catalog";
-import { directionDelta, oppositeDirection, inBounds } from "./world";
+import { directionDelta, oppositeDirection, inBounds, nextRandom } from "./world";
+import { processFilterSplitters, processRecyclers } from "./reliability";
 
 const MINING_INTERVAL = 60; // ticks between mining operations
 const MAX_OUTPUT_BUFFER = 10; // max items in output buffer
@@ -14,6 +15,7 @@ const MAX_OUTPUT_BUFFER = 10; // max items in output buffer
 function processMiners(world: WorldState): void {
   for (const building of Object.values(world.buildings)) {
     if (building.type !== "miner") continue;
+    if (building.faulted) continue; // Skip faulted buildings
 
     const tile = world.tiles[building.y]![building.x]!;
     if (!tile.deposit || tile.deposit.remaining <= 0) continue;
@@ -58,6 +60,7 @@ function processMiners(world: WorldState): void {
 function processCraftingBuildings(world: WorldState): void {
   for (const building of Object.values(world.buildings)) {
     if (building.type !== "smelter" && building.type !== "assembler") continue;
+    if (building.faulted) continue; // Skip faulted buildings
     if (!building.recipeId) continue;
 
     const recipe = RECIPE_CATALOG[building.recipeId];
@@ -96,6 +99,15 @@ function processCraftingBuildings(world: WorldState): void {
       for (const [mat, amount] of Object.entries(recipe.outputs)) {
         const matKey = mat as MaterialId;
         addToBuffer(building.outputBuffer, matKey, amount!);
+      }
+
+      // Emit slag probabilistically if recipe has slagChance
+      if (recipe.slagChance !== undefined && recipe.slagChance > 0) {
+        const { value, nextState } = nextRandom(world.rngState);
+        world.rngState = nextState;
+        if (value < recipe.slagChance) {
+          addToBuffer(building.outputBuffer, "slag", 1);
+        }
       }
 
       building.craftProgress = 0;
@@ -253,6 +265,7 @@ function canAcceptItem(building: BuildingState, material: MaterialId): boolean {
     case "belt":
       return building.beltItems.length < 3;
     case "splitter":
+    case "filter_splitter":
       return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
     case "smelter":
     case "assembler":
@@ -262,6 +275,8 @@ function canAcceptItem(building: BuildingState, material: MaterialId): boolean {
       if (!recipe) return false;
       return recipe.inputs.hasOwnProperty(material);
     case "hub":
+    case "underground_belt":
+    case "recycler":
       return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
     default:
       return false;
@@ -284,9 +299,12 @@ function addItemToBuilding(building: BuildingState, material: MaterialId): void 
       building.beltItems.push({ material, movedAtTick: 0 });
       break;
     case "splitter":
+    case "filter_splitter":
     case "smelter":
     case "assembler":
     case "hub":
+    case "underground_belt":
+    case "recycler":
       addToBuffer(building.inputBuffer, material, 1);
       break;
   }
@@ -328,9 +346,12 @@ function transferItem(
       }
       break;
     case "splitter":
+    case "filter_splitter":
     case "smelter":
     case "assembler":
     case "hub":
+    case "underground_belt":
+    case "recycler":
       const currentCount = countBufferItems(targetBuilding.inputBuffer);
       const space = MAX_OUTPUT_BUFFER - currentCount;
       accepted = Math.min(available, maxAmount, space);
@@ -432,11 +453,17 @@ export function stepTick(world: WorldState): void {
   // 4. Process splitters
   processSplitters(world);
 
-  // 5. Process belts
+  // 5. Process filter splitters
+  processFilterSplitters(world);
+
+  // 6. Process belts
   processBelts(world);
 
-  // 6. Process hubs (accept deliveries)
+  // 7. Process hubs (accept deliveries)
   processHubs(world);
+
+  // 8. Process recyclers
+  processRecyclers(world);
 }
 
 /**
