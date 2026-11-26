@@ -298,6 +298,8 @@ export function setRecipe(
       building.faulted = false;
       changes.repaired = true;
     }
+    building.blockedTicks = 0;
+    building.load = 0;
   }
 
   // Handle recipeId (smelter/assembler only)
