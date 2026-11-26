@@ -58,6 +58,48 @@ describe("Input Controller", () => {
       const r = handleTileClick(world, s, world.hubOrigin.x, world.hubOrigin.y);
       expect(r.success).toBe(false);
     });
+
+    it("should place a filter_splitter with filterMaterial when selectedFilter is set", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "filter_splitter"; s.direction = "E";
+      s.selectedFilter = "iron_plate";
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      expect(t.buildingId).toBeDefined();
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("filter_splitter");
+      expect(building.filterMaterial).toBe("iron_plate");
+    });
+
+    it("should place a filter_splitter without filterMaterial when selectedFilter is null", () => {
+      const freshWorld = createWorld(123);
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "filter_splitter"; s.direction = "E";
+      s.selectedFilter = null;
+      const r = handleTileClick(freshWorld, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = freshWorld.tiles[10]![10]!;
+      expect(t.buildingId).toBeDefined();
+      const building = freshWorld.buildings[t.buildingId!]!;
+      expect(building.type).toBe("filter_splitter");
+      expect(building.filterMaterial).toBeUndefined();
+    });
+
+    it("should place underground_belt, recycler, and sensor buildings", () => {
+      const s1 = createInputState(); s1.mode = "place"; s1.selectedBuilding = "underground_belt";
+      const r1 = handleTileClick(world, s1, 12, 12);
+      expect(r1.success).toBe(true);
+      expect(world.buildings[world.tiles[12]![12]!.buildingId!]!.type).toBe("underground_belt");
+
+      const s2 = createInputState(); s2.mode = "place"; s2.selectedBuilding = "recycler";
+      const r2 = handleTileClick(world, s2, 13, 13);
+      expect(r2.success).toBe(true);
+      expect(world.buildings[world.tiles[13]![13]!.buildingId!]!.type).toBe("recycler");
+
+      const s3 = createInputState(); s3.mode = "place"; s3.selectedBuilding = "sensor";
+      const r3 = handleTileClick(world, s3, 14, 14);
+      expect(r3.success).toBe(true);
+      expect(world.buildings[world.tiles[14]![14]!.buildingId!]!.type).toBe("sensor");
+    });
   });
 
   describe("handleTileClick - demolition", () => {
