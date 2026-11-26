@@ -4,6 +4,7 @@
 import type { WorldState, MaterialId, RecipeId } from "./types";
 import { RECIPE_CATALOG, TECH_CATALOG } from "./catalog";
 import { HUB_ORIGIN } from "./world";
+import { collectSensorAlerts } from "./reliability";
 
 // ============================================================================
 // Query Function Results
@@ -310,9 +311,22 @@ export function getMetrics(
   // Generate alerts
   const alerts: Alert[] = [];
 
+  // Collect sensor alerts from reliability module
+  const sensorAlerts = collectSensorAlerts(world);
+  for (const sensorAlert of sensorAlerts) {
+    alerts.push({
+      type: sensorAlert.alertType === "jam" ? "faulted" : sensorAlert.alertType === "depleted" ? "depleted" : "faulted",
+      buildingId: sensorAlert.buildingId,
+      x: world.buildings[sensorAlert.buildingId]?.x || 0,
+      y: world.buildings[sensorAlert.buildingId]?.y || 0,
+      message: sensorAlert.message,
+    });
+  }
+
+  // Also add faulted and depleted alerts from non-sensor buildings
   // Faulted buildings
   for (const building of Object.values(world.buildings)) {
-    if (building.faulted) {
+    if (building.faulted && !sensorAlerts.some(sa => sa.buildingId === building.id)) {
       alerts.push({
         type: "faulted",
         buildingId: building.id,
@@ -328,13 +342,15 @@ export function getMetrics(
     if (building.type === "miner") {
       const tile = world.tiles[building.y]?.[building.x];
       if (tile?.deposit && tile.deposit.remaining <= 0) {
-        alerts.push({
-          type: "depleted",
-          buildingId: building.id,
-          x: building.x,
-          y: building.y,
-          message: `Miner ${building.id} has depleted its resource`,
-        });
+        if (!sensorAlerts.some(sa => sa.buildingId === building.id)) {
+          alerts.push({
+            type: "depleted",
+            buildingId: building.id,
+            x: building.x,
+            y: building.y,
+            message: `Miner ${building.id} has depleted its resource`,
+          });
+        }
       }
     }
   }
