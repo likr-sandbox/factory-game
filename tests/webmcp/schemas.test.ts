@@ -75,12 +75,10 @@ describe("Tool Schema Structure", () => {
 });
 
 describe("Read Tool Schemas", () => {
-  it("get_factory_summary should have optional properties", () => {
+  it("get_factory_summary should have empty properties", () => {
     const schema = TOOL_SCHEMAS.get_factory_summary;
     const props = schema.inputSchema as Record<string, unknown>;
-    expect(props.properties).toBeDefined();
-    expect((props.properties as Record<string, unknown>).includeBuildings).toBeDefined();
-    expect((props.properties as Record<string, unknown>).includeResources).toBeDefined();
+    expect(props.properties).toEqual({});
     expect(Array.isArray(props.required)).toBe(true);
     expect((props.required as string[]).length).toBe(0);
   });
@@ -91,25 +89,26 @@ describe("Read Tool Schemas", () => {
     expect(props.required).toEqual(["x", "y", "width", "height"]);
   });
 
-  it("find_resources should require centerX, centerY, radius", () => {
+  it("find_resources should have optional material, onlyAvailable, limit properties", () => {
     const schema = TOOL_SCHEMAS.find_resources;
     const props = schema.inputSchema as Record<string, unknown>;
-    expect(props.required).toEqual(["centerX", "centerY", "radius"]);
+    expect((props.properties as Record<string, unknown>)?.material).toBeDefined();
+    expect((props.properties as Record<string, unknown>)?.onlyAvailable).toBeDefined();
+    expect((props.properties as Record<string, unknown>)?.limit).toBeDefined();
+    expect(Array.isArray(props.required)).toBe(true);
+    expect((props.required as string[]).length).toBe(0);
   });
 
-  it("list_recipes should have optional building filter with enum", () => {
+  it("list_recipes should have optional onlyUnlocked property", () => {
     const schema = TOOL_SCHEMAS.list_recipes;
     const props = schema.inputSchema as Record<string, unknown>;
-    const buildingProp = (props.properties as Record<string, unknown>)?.building;
-    expect(buildingProp).toBeDefined();
-    expect((buildingProp as Record<string, unknown>).enum).toEqual(["smelter", "assembler"]);
+    expect((props.properties as Record<string, unknown>)?.onlyUnlocked).toBeDefined();
   });
 
-  it("get_metrics should have optional breakdown properties", () => {
+  it("get_metrics should have optional windowTicks property", () => {
     const schema = TOOL_SCHEMAS.get_metrics;
     const props = schema.inputSchema as Record<string, unknown>;
-    expect((props.properties as Record<string, unknown>).breakdownByMaterial).toBeDefined();
-    expect((props.properties as Record<string, unknown>).breakdownByBuilding).toBeDefined();
+    expect((props.properties as Record<string, unknown>)?.windowTicks).toBeDefined();
   });
 });
 

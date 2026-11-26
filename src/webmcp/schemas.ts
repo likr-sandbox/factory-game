@@ -43,10 +43,7 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
       "Get a comprehensive summary of the current factory state including buildings, resources, and production metrics.",
     inputSchema: {
       type: "object",
-      properties: {
-        includeBuildings: { type: "boolean", description: "Include detailed building information" },
-        includeResources: { type: "boolean", description: "Include resource deposit information" },
-      },
+      properties: {},
       required: [],
       additionalProperties: false,
     },
@@ -70,28 +67,26 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
   find_resources: {
     name: "find_resources",
     description:
-      "Find all resource deposits of a specific material type within a search radius from a given point.",
+      "Find all resource deposits, optionally filtered by material type, availability, and result limit.",
     inputSchema: {
       type: "object",
       properties: {
-        centerX: { type: "number", description: "Center X coordinate for the search" },
-        centerY: { type: "number", description: "Center Y coordinate for the search" },
-        radius: { type: "number", description: "Search radius in tiles" },
-        material: { type: "string", enum: ["iron_ore", "copper_ore", "coal", "silica_sand"], description: "Filter by material type" },
+        material: { type: "string", enum: ["iron_ore", "copper_ore", "coal", "silica_sand", "iron_plate", "copper_plate", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module", "slag"], description: "Filter by material type" },
+        onlyAvailable: { type: "boolean", description: "Only return deposits with remaining > 0 (default: true)" },
+        limit: { type: "number", description: "Maximum number of results to return" },
       },
-      required: ["centerX", "centerY", "radius"],
+      required: [],
       additionalProperties: false,
     },
   },
   list_recipes: {
     name: "list_recipes",
     description:
-      "List all available recipes, optionally filtered by building type or unlocked status.",
+      "List all available recipes, optionally filtered to only unlocked recipes.",
     inputSchema: {
       type: "object",
       properties: {
-        building: { type: "string", enum: ["smelter", "assembler"], description: "Filter recipes by building type" },
-        unlockedOnly: { type: "boolean", description: "Only return unlocked recipes" },
+        onlyUnlocked: { type: "boolean", description: "Only return unlocked recipes" },
       },
       required: [],
       additionalProperties: false,
@@ -104,8 +99,7 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
     inputSchema: {
       type: "object",
       properties: {
-        breakdownByMaterial: { type: "boolean", description: "Include per-material production breakdown" },
-        breakdownByBuilding: { type: "boolean", description: "Include per-building efficiency stats" },
+        windowTicks: { type: "number", description: "Number of ticks to aggregate metrics over (default: 600)" },
       },
       required: [],
       additionalProperties: false,
