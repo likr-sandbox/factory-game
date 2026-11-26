@@ -44,6 +44,8 @@ export type BuildingType =
 export type RecipeId =
   | "iron_plate"
   | "copper_plate"
+  | "iron_plate_high"
+  | "copper_plate_high"
   | "iron_gear"
   | "copper_wire"
   | "steel_plate"
