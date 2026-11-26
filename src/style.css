@@ -1,0 +1,173 @@
+/* Dark Industrial Theme */
+:root {
+  --bg-dark: #1a1a2e;
+  --bg-medium: #16213e;
+  --bg-light: #0f3460;
+  --accent-color: #e94560;
+  --text-primary: #eaeaea;
+  --text-secondary: #b8b8b8;
+  --border-color: #4a4a6a;
+  --panel-bg: rgba(22, 33, 62, 0.95);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Game Container - Full viewport canvas area */
+#game-container {
+  flex: 1;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-medium);
+}
+
+#game-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  image-rendering: -moz-crisp-edges;
+}
+
+/* Top HUD Bar */
+#hud-container {
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  background-color: var(--panel-bg);
+  border-top: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  overflow: visible;
+}
+
+.hud-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background-color: var(--bg-light);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* Bottom Palette/Inspector Bar */
+#palette-container {
+  width: 100%;
+  height: 80px;
+  min-height: 80px;
+  background-color: var(--panel-bg);
+  border-top: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.palette-item {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  background-color: var(--bg-light);
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.1s ease;
+}
+
+.palette-item:hover {
+  border-color: var(--accent-color);
+  transform: scale(1.05);
+}
+
+.palette-item.selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 8px var(--accent-color);
+}
+
+.palette-item img {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  image-rendering: -moz-crisp-edges;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #hud-container {
+    height: 40px;
+    min-height: 40px;
+    padding: 0 8px;
+    gap: 8px;
+  }
+
+  .hud-item {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  #palette-container {
+    height: 72px;
+    min-height: 72px;
+    padding: 4px 8px;
+  }
+
+  .palette-item {
+    width: 56px;
+    height: 56px;
+  }
+
+  .palette-item img {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Scrollbar styling for palette */
+#palette-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+#palette-container::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+
+#palette-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+#palette-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-color);
+}
