@@ -10,6 +10,9 @@ import { createInputState, type InputState, repairBuilding, applyRecipe } from "
 import { mountHud, type HudHandle } from "./ui/hud";
 import { mountPaletteBar, type PaletteBarHandle } from "./ui/paletteBar";
 import { createInspector, type InspectorHandle } from "./ui/inspector";
+import { registerFactoryWebMcpTools } from "./webmcp/bridge";
+import { mountWebMcpPanel } from "./ui/webmcpPanel";
+import type { ModelContextLike, WebMcpHandle } from "./webmcp/types";
 
 // Base tick interval in milliseconds (60 FPS target)
 export const BASE_TICK_INTERVAL_MS = 1000 / 60;
@@ -30,6 +33,7 @@ let scene: FactoryScene | null = null;
 let hud: HudHandle | null = null;
 let paletteBar: PaletteBarHandle | null = null;
 let inspector: InspectorHandle | null = null;
+let webmcpHandle: WebMcpHandle | null = null;
 
 // Input state
 let inputState: InputState = createInputState();
@@ -104,6 +108,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   const gameContainer = doc.getElementById("game-container");
   const hudContainer = doc.getElementById("hud-container");
   const paletteContainer = doc.getElementById("palette-container");
+  const webmcpContainer = doc.getElementById("webmcp-container");
 
   if (!gameContainer) {
     throw new Error("Required DOM element #game-container not found");
@@ -113,6 +118,9 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   }
   if (!paletteContainer) {
     throw new Error("Required DOM element #palette-container not found");
+  }
+  if (!webmcpContainer) {
+    throw new Error("Required DOM element #webmcp-container not found");
   }
 
   // Create inspector container within palette container (must be done before mountPaletteBar clears contents)
@@ -167,6 +175,20 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     },
   });
 
+  // Register WebMCP tools and mount panel
+  webmcpHandle = registerFactoryWebMcpTools({
+    getWorld: () => activeWorld,
+    onWorldMutated: () => {
+      scene?.syncWorld(activeWorld);
+      hud?.update(activeWorld);
+      paletteBar?.sync(activeWorld, inputState);
+      inspector?.update(activeWorld, inputState.inspectedCoord);
+    },
+    env: { document: doc as unknown as { modelContext?: ModelContextLike }, navigator: (globalThis as unknown as { navigator?: { modelContext?: ModelContextLike } }).navigator },
+  });
+
+  mountWebMcpPanel(webmcpContainer, webmcpHandle);
+
   // Create Phaser game instance
   const phaserGame = new Phaser.Game(createPhaserConfig("game-container", scene));
 
@@ -212,7 +234,15 @@ function rotateDirection(dir: "N" | "E" | "S" | "W"): "N" | "E" | "S" | "W" {
   }
 }
 
+/**
+ * Get the WebMCP handle for inspection/testing
+ * @returns The WebMCP handle or null if not initialized
+ */
+export function getWebMcpHandle(): WebMcpHandle | null {
+  return webmcpHandle;
+}
+
 // Auto-initialize if running in browser environment with required containers
-if (typeof globalThis.document !== "undefined" && globalThis.document.getElementById("game-container")) {
+if (typeof globalThis.document !== "undefined" && globalThis.document.getElementById("game-container") && globalThis.document.getElementById("webmcp-container")) {
   initGame(globalThis.document as Document);
 }
