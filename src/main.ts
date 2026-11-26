@@ -6,7 +6,7 @@ import type { WorldState } from "./sim/types";
 import { stepTick } from "./sim/engine";
 import { createPhaserConfig } from "./game/config";
 import { FactoryScene } from "./game/FactoryScene";
-import { createInputState, type InputState } from "./game/input";
+import { createInputState, type InputState, repairBuilding, applyRecipe } from "./game/input";
 import { mountHud, type HudHandle } from "./ui/hud";
 import { mountPaletteBar, type PaletteBarHandle } from "./ui/paletteBar";
 import { createInspector, type InspectorHandle } from "./ui/inspector";
@@ -123,6 +123,9 @@ export function initGame(doc: Document = globalThis.document as Document): void 
 
   // Create scene instance (shared between main loop and Phaser)
   scene = new FactoryScene();
+  
+  // Bind the active world and input state to the scene
+  scene.setContext(activeWorld, inputState);
 
   // Mount UI components
   hud = mountHud(hudContainer, {
@@ -148,10 +151,12 @@ export function initGame(doc: Document = globalThis.document as Document): void 
 
   inspector = createInspector(inspectorContainer, {
     onRepair: (x, y) => {
-      // Implementation would call repairBuilding
+      repairBuilding(activeWorld, x, y);
+      // Scene will be updated in next frame via syncWorld
     },
     onSetRecipe: (x, y, recipeId) => {
-      // Implementation would call setRecipe
+      applyRecipe(activeWorld, x, y, recipeId);
+      // Scene will be updated in next frame via syncWorld
     },
   });
 
