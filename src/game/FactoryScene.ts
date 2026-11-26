@@ -65,17 +65,42 @@ export class FactoryScene extends Scene {
 
   /**
    * Render the 64x64 terrain tilemap using texture keys from sprites/terrain
+   * Renders actual terrain and ore deposits from this.world.tiles when bound
    */
   renderTerrainTilemap(): void {
     const worldWidth = 64;
     const worldHeight = 64;
 
-    // Placeholder terrain rendering - in production, this would use actual world.tiles
-    // For now, render a simple grass grid
-    for (let y = 0; y < worldHeight; y++) {
-      for (let x = 0; x < worldWidth; x++) {
-        const terrainKey = getTerrainTextureKey("grass", 0);
-        this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey);
+    // If world is bound, render actual terrain and deposits from world.tiles
+    if (this.world && this.world.tiles.length > 0) {
+      for (let y = 0; y < this.world.height; y++) {
+        for (let x = 0; x < this.world.width; x++) {
+          const tile = this.world.tiles[y]?.[x];
+          if (!tile) continue;
+
+          // Render base terrain
+          const terrainKey = getTerrainTextureKey(tile.terrain, 0);
+          this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey);
+
+          // Render ore deposit overlay if present
+          if (tile.deposit) {
+            const depositKey = getDepositTextureKey(tile.deposit.material, 0);
+            const depositSprite = this.add.sprite(
+              x * TILE_SIZE + TILE_SIZE / 2,
+              y * TILE_SIZE + TILE_SIZE / 2,
+              depositKey
+            );
+            depositSprite.setDepth(0.5); // Deposit overlays terrain
+          }
+        }
+      }
+    } else {
+      // Fallback: render placeholder grass grid when world not yet bound
+      for (let y = 0; y < worldHeight; y++) {
+        for (let x = 0; x < worldWidth; x++) {
+          const terrainKey = getTerrainTextureKey("grass", 0);
+          this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey);
+        }
       }
     }
   }
