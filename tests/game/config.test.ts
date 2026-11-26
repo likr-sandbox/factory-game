@@ -1,47 +1,30 @@
 // Unit tests for Phaser config and FactoryScene texture/item sync
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
-// Mock Phaser before importing anything else
 vi.mock("phaser", () => ({
-  Scene: class MockScene {
-    constructor(public key: string) {}
-  },
+  Scene: class MockScene { constructor(public key: string) {} },
   AUTO: 1,
-  Game: class MockGame {
-    constructor(_config: unknown) {}
-  },
+  GameObjects: { Sprite: class {} },
 }));
 
 import { Scene } from "phaser";
 import { createPhaserConfig } from "../../src/game/config";
 import { FactoryScene, TILE_SIZE } from "../../src/game/FactoryScene";
 import { getTerrainTextureKey, getDepositTextureKey } from "../../src/game/sprites/terrain";
+import { getBuildingTextureKey } from "../../src/game/sprites/buildings";
+import { getItemTextureKey } from "../../src/game/sprites/items";
 import type { WorldState, BuildingState, BeltItem } from "../../src/sim/types";
+import { createInputState } from "../../src/game/input";
 
 describe("createPhaserConfig", () => {
-  it("should set pixelArt to true", () => {
+  it("should set pixelArt, roundPixels, antialias, parent correctly", () => {
     const config = createPhaserConfig();
     expect(config.pixelArt).toBe(true);
-  });
-
-  it("should set roundPixels to true", () => {
-    const config = createPhaserConfig();
     expect(config.roundPixels).toBe(true);
-  });
-
-  it("should set antialias to false", () => {
-    const config = createPhaserConfig();
     expect(config.antialias).toBe(false);
-  });
-
-  it("should default parent to game-container", () => {
-    const config = createPhaserConfig();
     expect(config.parent).toBe("game-container");
-  });
-
-  it("should use custom parent when provided", () => {
-    const config = createPhaserConfig("custom-container");
-    expect(config.parent).toBe("custom-container");
+    expect(config.backgroundColor).toBe("#1a1a2e");
+    expect(config.type).toBe(1);
   });
 
   it("should register FactoryScene in scene array", () => {
@@ -52,177 +35,123 @@ describe("createPhaserConfig", () => {
     }
   });
 
-  it("should use sceneInstance when provided", () => {
+  it("should use custom parent and sceneInstance when provided", () => {
     const instance = new FactoryScene();
-    const config = createPhaserConfig(undefined, instance);
+    const config = createPhaserConfig("custom", instance);
+    expect(config.parent).toBe("custom");
     expect(config.scene).toBe(instance);
-  });
-
-  it("should set backgroundColor to #1a1a2e", () => {
-    const config = createPhaserConfig();
-    expect(config.backgroundColor).toBe("#1a1a2e");
-  });
-
-  it("should set type to Phaser.AUTO", () => {
-    const config = createPhaserConfig();
-    expect(config.type).toBe(1); // Phaser.AUTO = 1 in mock
   });
 });
 
 describe("FactoryScene", () => {
-  it("should export TILE_SIZE as 32", () => {
+  it("should export TILE_SIZE=32 and have setContext method", () => {
     expect(TILE_SIZE).toBe(32);
-  });
-
-  it("should have correct scene key", () => {
-    // FactoryScene extends Scene and passes "FactoryScene" to super()
     const scene = new FactoryScene();
     expect(scene).toBeInstanceOf(Scene);
+    expect(typeof scene.setContext).toBe("function");
   });
 });
 
-describe("getTerrainTextureKey and getDepositTextureKey", () => {
-  it("getTerrainTextureKey should generate deterministic keys", () => {
+describe("Texture key helpers", () => {
+  it("getTerrainTextureKey/getDepositTextureKey should generate deterministic keys", () => {
     expect(getTerrainTextureKey("grass", 0)).toBe("terrain:grass:seed:0");
-    expect(getTerrainTextureKey("rock", 0)).toBe("terrain:rock:seed:0");
-    expect(getTerrainTextureKey("water", 0)).toBe("terrain:water:seed:0");
+    expect(getDepositTextureKey("iron_ore", 0)).toBe("deposit:iron_ore:seed:0");
   });
 
-  it("getDepositTextureKey should generate deterministic keys", () => {
-    expect(getDepositTextureKey("iron_ore", 0)).toBe("deposit:iron_ore:seed:0");
-    expect(getDepositTextureKey("copper_ore", 0)).toBe("deposit:copper_ore:seed:0");
+  it("getBuildingTextureKey/getItemTextureKey should generate correct format", () => {
+    expect(getBuildingTextureKey("belt", "E", 0)).toBe("belt_E_0");
+    expect(getItemTextureKey("iron_ore")).toBe("item_iron_ore");
   });
 });
 
-describe("FactoryScene.syncWorld and updateBeltItemSprites", () => {
-  it("should reset itemIndex inside per-building loop for multiple buildings", () => {
-    // Create mock world with two buildings, each with belt items
-    const building1Id = "building_1";
-    const building2Id = "building_2";
+describe("FactoryScene.syncWorld sprite tracking", () => {
+  it("should create building sprites with correct texture keys including faulted state", () => {
+    const scene = new FactoryScene();
+    const spriteCalls: Array<{ texture: string }> = [];
+    scene.add = {
+      sprite: vi.fn((_: number, __: number, texture: string) => {
+        spriteCalls.push({ texture });
+        return { setDepth: vi.fn(), setName: vi.fn(), destroy: vi.fn() };
+      }),
+      image: vi.fn(() => ({ destroy: vi.fn() })),
+    } as unknown as typeof scene.add;
+    scene.children = { list: [] } as unknown as typeof scene.children;
 
     const world: WorldState = {
-      seed: 12345,
-      width: 64,
-      height: 64,
-      tick: 0,
-      rngState: 12345,
-      tiles: [],
+      seed: 1, width: 64, height: 64, tick: 0, rngState: 1, tiles: [],
       buildings: {
-        [building1Id]: {
-          id: building1Id,
-          type: "belt",
-          x: 10,
-          y: 10,
-          direction: "E",
-          inputBuffer: {},
-          outputBuffer: {},
-          beltItems: [{ material: "iron_ore", movedAtTick: 0 }] as BeltItem[],
-          craftProgress: 0,
-          roundRobinIndex: 0,
-          faulted: false,
-          load: 0,
-          idleTicks: 0,
-          blockedTicks: 0,
-        } as BuildingState,
-        [building2Id]: {
-          id: building2Id,
-          type: "belt",
-          x: 20,
-          y: 20,
-          direction: "E",
-          inputBuffer: {},
-          outputBuffer: {},
-          beltItems: [
-            { material: "iron_plate", movedAtTick: 0 },
-            { material: "copper_plate", movedAtTick: 0 },
-          ] as BeltItem[],
-          craftProgress: 0,
-          roundRobinIndex: 0,
-          faulted: false,
-          load: 0,
-          idleTicks: 0,
-          blockedTicks: 0,
-        } as BuildingState,
+        b1: { id: "b1", type: "belt", x: 10, y: 10, direction: "E",
+              inputBuffer: {}, outputBuffer: {}, beltItems: [], craftProgress: 0,
+              roundRobinIndex: 0, faulted: false, load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
+        b2: { id: "b2", type: "miner", x: 5, y: 5, direction: "N",
+              inputBuffer: {}, outputBuffer: {}, beltItems: [], craftProgress: 0,
+              roundRobinIndex: 0, faulted: true, load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
       },
-      nextBuildingId: 3,
-      hubOrigin: { x: 31, y: 31 },
-      delivered: {},
-      deliveryHistory: [],
-      unlockedTechs: [],
-      completedQuests: [],
+      nextBuildingId: 3, hubOrigin: { x: 31, y: 31 }, delivered: {}, deliveryHistory: [],
+      unlockedTechs: [], completedQuests: [],
     };
 
-    // Expected item keys based on per-building index
-    const expectedKeys = [
-      `${building1Id}_item_0`,
-      `${building2Id}_item_0`,
-      `${building2Id}_item_1`,
-    ];
-
-    // Verify the pattern matches what syncWorld expects
-    expect(expectedKeys).toEqual([
-      "building_1_item_0",
-      "building_2_item_0",
-      "building_2_item_1",
-    ]);
+    scene.syncWorld(world);
+    expect(spriteCalls[0]?.texture).toBe("belt_E_0_ok");
+    expect(spriteCalls[1]?.texture).toBe("miner_N_0_faulted");
   });
 
-  it("should clean up removed item sprites when building loses items", () => {
-    const buildingId = "building_test";
+  it("should reset itemIndex inside per-building loop and clean up on resync", () => {
+    const scene = new FactoryScene();
+    const setNameCalls: string[] = [];
+    const destroyCalls: unknown[] = [];
+    
+    scene.add = {
+      sprite: vi.fn((_: number, __: number, texture: string) => ({
+        setDepth: vi.fn(),
+        setName: (n: string) => { setNameCalls.push(n); },
+        destroy: vi.fn(() => { destroyCalls.push(texture); }),
+      })),
+      image: vi.fn(() => ({ destroy: vi.fn() })),
+    } as unknown as typeof scene.add;
+    scene.children = { list: [] } as unknown as typeof scene.children;
 
     const worldWithItems: WorldState = {
-      seed: 12345,
-      width: 64,
-      height: 64,
-      tick: 0,
-      rngState: 12345,
-      tiles: [],
+      seed: 1, width: 64, height: 64, tick: 0, rngState: 1, tiles: [],
       buildings: {
-        [buildingId]: {
-          id: buildingId,
-          type: "belt",
-          x: 10,
-          y: 10,
-          direction: "E",
-          inputBuffer: {},
-          outputBuffer: {},
-          beltItems: [
-            { material: "iron_ore", movedAtTick: 0 },
-            { material: "iron_plate", movedAtTick: 0 },
-          ] as BeltItem[],
-          craftProgress: 0,
-          roundRobinIndex: 0,
-          faulted: false,
-          load: 0,
-          idleTicks: 0,
-          blockedTicks: 0,
-        } as BuildingState,
+        b1: { id: "b1", type: "belt", x: 10, y: 10, direction: "E",
+              inputBuffer: {}, outputBuffer: {},
+              beltItems: [{ material: "iron_ore", movedAtTick: 0 }] as BeltItem[],
+              craftProgress: 0, roundRobinIndex: 0, faulted: false,
+              load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
+        b2: { id: "b2", type: "belt", x: 20, y: 20, direction: "E",
+              inputBuffer: {}, outputBuffer: {},
+              beltItems: [{ material: "iron_plate", movedAtTick: 0 }, { material: "copper_plate", movedAtTick: 0 }] as BeltItem[],
+              craftProgress: 0, roundRobinIndex: 0, faulted: false,
+              load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
       },
-      nextBuildingId: 2,
-      hubOrigin: { x: 31, y: 31 },
-      delivered: {},
-      deliveryHistory: [],
-      unlockedTechs: [],
-      completedQuests: [],
+      nextBuildingId: 3, hubOrigin: { x: 31, y: 31 }, delivered: {}, deliveryHistory: [],
+      unlockedTechs: [], completedQuests: [],
     };
 
-    const worldWithoutItems: WorldState = {
-      ...worldWithItems,
-      buildings: {
-        [buildingId]: {
-          ...worldWithItems.buildings[buildingId]!,
-          beltItems: [] as BeltItem[],
-        } as BuildingState,
-      },
+    scene.syncWorld(worldWithItems);
+    const itemNames = setNameCalls.filter((n) => n.includes("item_"));
+    expect(itemNames).toContain("b1_item_0");
+    expect(itemNames).toContain("b2_item_0");
+    expect(itemNames).toContain("b2_item_1");
+
+    // Resync without items - should destroy all sprites
+    const worldNoItems: WorldState = { ...worldWithItems, buildings: {} };
+    scene.syncWorld(worldNoItems);
+    expect(destroyCalls.length).toBeGreaterThan(0); // Sprites were destroyed
+  });
+});
+
+describe("FactoryScene.setContext integration", () => {
+  it("should bind world and input state via setContext", () => {
+    const scene = new FactoryScene();
+    const world: WorldState = {
+      seed: 1, width: 64, height: 64, tick: 0, rngState: 1, tiles: [],
+      buildings: {}, nextBuildingId: 1, hubOrigin: { x: 31, y: 31 },
+      delivered: {}, deliveryHistory: [], unlockedTechs: [], completedQuests: [],
     };
-
-    // Expected keys when items exist
-    const expectedKeysWithItems = new Set([`${buildingId}_item_0`, `${buildingId}_item_1`]);
-
-    // Expected keys when items are removed (empty)
-    const expectedKeysWithoutItems = new Set<string>();
-
-    expect(expectedKeysWithItems.size).toBe(2);
-    expect(expectedKeysWithoutItems.size).toBe(0);
+    const inputState = createInputState();
+    scene.setContext(world, inputState);
+    expect(() => scene.syncWorld(world)).not.toThrow();
   });
 });
