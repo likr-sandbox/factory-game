@@ -149,17 +149,21 @@ function processSplitters(world: WorldState): void {
       const matKey = material as MaterialId;
       let remaining = amount!;
 
-      while (remaining > 0 && building.roundRobinIndex < outputs.length) {
+      // Track attempts to prevent infinite loop
+      const maxAttempts = remaining * outputs.length;
+      let attempts = 0;
+
+      while (remaining > 0 && attempts < maxAttempts) {
         const dir = outputs[building.roundRobinIndex]!;
         if (trySendToDirection(world, building, matKey, 1, dir)) {
           remaining--;
+          // Advance roundRobinIndex on successful send for true round-robin
+          building.roundRobinIndex = (building.roundRobinIndex + 1) % outputs.length;
         } else {
           // Move to next output if blocked
           building.roundRobinIndex = (building.roundRobinIndex + 1) % outputs.length;
         }
-        
-        // Prevent infinite loop
-        if (building.roundRobinIndex === 0) break;
+        attempts++;
       }
     }
   }

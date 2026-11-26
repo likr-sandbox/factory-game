@@ -120,20 +120,24 @@ describe("Splitter round-robin distribution", () => {
     const splitterId = placeBuilding(world, 10, 10, "splitter", "E");
 
     // Place output belts to East and South
-    placeBuilding(world, 11, 10, "belt", "E"); // East output
-    placeBuilding(world, 10, 11, "belt", "S"); // South output
+    const eastBeltId = placeBuilding(world, 11, 10, "belt", "E"); // East output
+    const southBeltId = placeBuilding(world, 10, 11, "belt", "S"); // South output
 
     const splitter = world.buildings[splitterId]!;
 
-    // Add items to splitter input buffer
+    // Add 4 items to splitter input buffer
     splitter.inputBuffer.iron_plate = 4;
 
     // Process the splitter
     stepTick(world);
 
-    // Items should be distributed across outputs
-    // Check that input buffer decreased
-    expect(splitter.inputBuffer.iron_plate).toBeLessThan(4);
+    // Items should be distributed round-robin: 2 to East, 2 to South
+    const eastBelt = world.buildings[eastBeltId]!;
+    const southBelt = world.buildings[southBeltId]!;
+    
+    expect(eastBelt.beltItems.length).toBe(2);
+    expect(southBelt.beltItems.length).toBe(2);
+    expect(splitter.inputBuffer.iron_plate).toBe(0);
   });
 });
 
@@ -145,20 +149,19 @@ describe("Smelter and Assembler crafting", () => {
     const HUB_X = 31;
     const HUB_Y = 31;
 
-    // Place smelter near hub
-    placeBuilding(world, HUB_X, HUB_Y - 2, "smelter", "S", "iron_plate");
+    // Place smelter adjacent to hub (directly above, facing South)
+    const smelterId = placeBuilding(world, HUB_X, HUB_Y - 1, "smelter", "S", "iron_plate");
 
     // Provide input (iron_ore)
-    const smelter = world.buildings[Object.keys(world.buildings).find(k => k !== "hub")!]!;
+    const smelter = world.buildings[smelterId]!;
     smelter.inputBuffer.iron_ore = 10;
 
     // Run ticks to complete crafting (60 ticks per plate)
-    stepTicks(world, 120);
+    // First 60 ticks: craft first plate, push to hub
+    stepTicks(world, 60);
 
     // Check that items were delivered to hub
-    const hub = world.buildings["hub"]!;
-    // The hub should have received items
-    expect(hub.type).toBe("hub");
+    expect(world.delivered.iron_plate).toBeGreaterThan(0);
   });
 
   it("assembler produces iron_gear", () => {
