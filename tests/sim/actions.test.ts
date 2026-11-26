@@ -188,4 +188,28 @@ describe("batchActions", () => {
     const nonHub = Object.keys(world.buildings).filter(id => id !== "hub");
     expect(nonHub.length).toBe(1);
   });
+
+  it("should rollback set_recipe mutations when later action fails in atomic mode", () => {
+    // Place a smelter first
+    const p = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_plate" });
+    expect(p.success).toBe(true);
+    const successP = getSuccessResult(p);
+    
+    // Verify initial recipe
+    expect(world.buildings[successP.buildingId!]!.recipeId).toBe("iron_plate");
+    
+    // Create batch: set recipe to copper_plate, then try to place on same tile (will fail)
+    const actions: BatchActionItem[] = [
+      { kind: "set_recipe", input: { x: 10, y: 10, recipeId: "copper_plate" } },
+      { kind: "place_building", input: { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" } },
+    ];
+    const r = batchActions(world, { actions, atomic: true });
+    
+    expect(r.success).toBe(false);
+    const failure = getFailureResult(r);
+    expect(failure.error.code).toBe("BATCH_FAILED");
+    
+    // Recipe should be rolled back to iron_plate
+    expect(world.buildings[successP.buildingId!]!.recipeId).toBe("iron_plate");
+  });
 });

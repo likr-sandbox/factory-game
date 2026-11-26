@@ -346,9 +346,18 @@ export function batchActions(
   let snapshot: { tiles: Tile[][]; buildings: Record<string, BuildingState>; nextBuildingId: number } | null = null;
 
   if (atomic) {
-    // Deep clone tiles (shallow clone each row, but tile objects are references we keep)
+    // Deep clone tiles
     const tilesClone = world.tiles.map(row => row.map(tile => ({ ...tile })));
-    const buildingsClone = { ...world.buildings };
+    // Deep clone buildings including buffers and beltItems
+    const buildingsClone: Record<string, BuildingState> = {};
+    for (const [id, b] of Object.entries(world.buildings)) {
+      buildingsClone[id] = {
+        ...b,
+        inputBuffer: { ...b.inputBuffer },
+        outputBuffer: { ...b.outputBuffer },
+        beltItems: b.beltItems.map(item => ({ ...item })),
+      };
+    }
     snapshot = {
       tiles: tilesClone,
       buildings: buildingsClone,
