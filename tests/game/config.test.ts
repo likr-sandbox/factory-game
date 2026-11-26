@@ -4,7 +4,6 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("phaser", () => ({
   Scene: class MockScene { constructor(public key: string) {} },
   AUTO: 1,
-  GameObjects: { Sprite: class {} },
 }));
 
 import { Scene } from "phaser";
@@ -17,7 +16,7 @@ import type { WorldState, BuildingState, BeltItem } from "../../src/sim/types";
 import { createInputState } from "../../src/game/input";
 
 describe("createPhaserConfig", () => {
-  it("should set pixelArt, roundPixels, antialias, parent correctly", () => {
+  it("should set correct config values", () => {
     const config = createPhaserConfig();
     expect(config.pixelArt).toBe(true);
     expect(config.roundPixels).toBe(true);
@@ -43,7 +42,7 @@ describe("createPhaserConfig", () => {
   });
 });
 
-describe("FactoryScene", () => {
+describe("FactoryScene basics", () => {
   it("should export TILE_SIZE=32 and have setContext method", () => {
     expect(TILE_SIZE).toBe(32);
     const scene = new FactoryScene();
@@ -77,7 +76,7 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
 
-    const world: WorldState = {
+    scene.syncWorld({
       seed: 1, width: 64, height: 64, tick: 0, rngState: 1, tiles: [],
       buildings: {
         b1: { id: "b1", type: "belt", x: 10, y: 10, direction: "E",
@@ -89,9 +88,8 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
       },
       nextBuildingId: 3, hubOrigin: { x: 31, y: 31 }, delivered: {}, deliveryHistory: [],
       unlockedTechs: [], completedQuests: [],
-    };
+    });
 
-    scene.syncWorld(world);
     expect(spriteCalls[0]?.texture).toBe("belt_E_0_ok");
     expect(spriteCalls[1]?.texture).toBe("miner_N_0_faulted");
   });
@@ -99,13 +97,13 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
   it("should reset itemIndex inside per-building loop and clean up on resync", () => {
     const scene = new FactoryScene();
     const setNameCalls: string[] = [];
-    const destroyCalls: unknown[] = [];
+    const destroyCount = { value: 0 };
     
     scene.add = {
-      sprite: vi.fn((_: number, __: number, texture: string) => ({
+      sprite: vi.fn(() => ({
         setDepth: vi.fn(),
         setName: (n: string) => { setNameCalls.push(n); },
-        destroy: vi.fn(() => { destroyCalls.push(texture); }),
+        destroy: vi.fn(() => { destroyCount.value++; }),
       })),
       image: vi.fn(() => ({ destroy: vi.fn() })),
     } as unknown as typeof scene.add;
@@ -117,13 +115,11 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
         b1: { id: "b1", type: "belt", x: 10, y: 10, direction: "E",
               inputBuffer: {}, outputBuffer: {},
               beltItems: [{ material: "iron_ore", movedAtTick: 0 }] as BeltItem[],
-              craftProgress: 0, roundRobinIndex: 0, faulted: false,
-              load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
+              craftProgress: 0, roundRobinIndex: 0, faulted: false, load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
         b2: { id: "b2", type: "belt", x: 20, y: 20, direction: "E",
               inputBuffer: {}, outputBuffer: {},
               beltItems: [{ material: "iron_plate", movedAtTick: 0 }, { material: "copper_plate", movedAtTick: 0 }] as BeltItem[],
-              craftProgress: 0, roundRobinIndex: 0, faulted: false,
-              load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
+              craftProgress: 0, roundRobinIndex: 0, faulted: false, load: 0, idleTicks: 0, blockedTicks: 0 } as BuildingState,
       },
       nextBuildingId: 3, hubOrigin: { x: 31, y: 31 }, delivered: {}, deliveryHistory: [],
       unlockedTechs: [], completedQuests: [],
@@ -131,14 +127,66 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
 
     scene.syncWorld(worldWithItems);
     const itemNames = setNameCalls.filter((n) => n.includes("item_"));
-    expect(itemNames).toContain("b1_item_0");
-    expect(itemNames).toContain("b2_item_0");
-    expect(itemNames).toContain("b2_item_1");
+    expect(itemNames).toEqual(expect.arrayContaining(["b1_item_0", "b2_item_0", "b2_item_1"]));
 
-    // Resync without items - should destroy all sprites
-    const worldNoItems: WorldState = { ...worldWithItems, buildings: {} };
-    scene.syncWorld(worldNoItems);
-    expect(destroyCalls.length).toBeGreaterThan(0); // Sprites were destroyed
+    scene.syncWorld({ ...worldWithItems, buildings: {} });
+    expect(destroyCount.value).toBeGreaterThan(0);
+  });
+});
+
+describe("FactoryScene.renderTerrainTilemap", () => {
+  it("should render terrain and ore deposits from world.tiles using correct texture keys", () => {
+    const scene = new FactoryScene();
+    const imagesCreated: string[] = [];
+    const spritesCreated: string[] = [];
+    const setDepthCalls: number[] = [];
+
+    scene.add = {
+      image: vi.fn((_: number, __: number, texture: string) => {
+        imagesCreated.push(texture);
+        return { destroy: vi.fn() };
+      }),
+      sprite: vi.fn((_: number, __: number, texture: string) => {
+        spritesCreated.push(texture);
+        return { setDepth: vi.fn((d: number) => { setDepthCalls.push(d); }), destroy: vi.fn() };
+      }),
+    } as unknown as typeof scene.add;
+    scene.children = { list: [] } as unknown as typeof scene.children;
+
+    scene.setContext({
+      seed: 1, width: 4, height: 4, tick: 0, rngState: 1,
+      tiles: [
+        [{ x: 0, y: 0, terrain: "grass", deposit: null, buildingId: null },
+         { x: 1, y: 0, terrain: "rock", deposit: null, buildingId: null },
+         { x: 2, y: 0, terrain: "grass", deposit: { material: "iron_ore", remaining: 1000, initialAmount: 1000 }, buildingId: null },
+         { x: 3, y: 0, terrain: "water", deposit: null, buildingId: null }],
+        [{ x: 0, y: 1, terrain: "grass", deposit: { material: "coal", remaining: 800, initialAmount: 800 }, buildingId: null },
+         { x: 1, y: 1, terrain: "rock", deposit: null, buildingId: null },
+         { x: 2, y: 1, terrain: "grass", deposit: null, buildingId: null },
+         { x: 3, y: 1, terrain: "grass", deposit: { material: "copper_ore", remaining: 1200, initialAmount: 1200 }, buildingId: null }],
+        [{ x: 0, y: 2, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 2, terrain: "grass", deposit: null, buildingId: null }, { x: 2, y: 2, terrain: "grass", deposit: null, buildingId: null }, { x: 3, y: 2, terrain: "grass", deposit: null, buildingId: null }],
+        [{ x: 0, y: 3, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 3, terrain: "grass", deposit: null, buildingId: null }, { x: 2, y: 3, terrain: "grass", deposit: null, buildingId: null }, { x: 3, y: 3, terrain: "grass", deposit: null, buildingId: null }],
+      ],
+      buildings: {}, nextBuildingId: 1, hubOrigin: { x: 31, y: 31 },
+      delivered: {}, deliveryHistory: [], unlockedTechs: [], completedQuests: [],
+    }, createInputState());
+    scene.renderTerrainTilemap();
+
+    expect(imagesCreated).toEqual(expect.arrayContaining(["terrain:grass:seed:0", "terrain:rock:seed:0", "terrain:water:seed:0"]));
+    expect(spritesCreated).toEqual(expect.arrayContaining(["deposit:iron_ore:seed:0", "deposit:coal:seed:0", "deposit:copper_ore:seed:0"]));
+    expect(setDepthCalls.filter((d) => d === 0.5).length).toBe(3);
+  });
+
+  it("should fallback to grass-only grid when world is not bound", () => {
+    const scene = new FactoryScene();
+    const imagesCreated: string[] = [];
+    scene.add = {
+      image: vi.fn((_: number, __: number, texture: string) => { imagesCreated.push(texture); return { destroy: vi.fn() }; }),
+      sprite: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn() })),
+    } as unknown as typeof scene.add;
+    scene.children = { list: [] } as unknown as typeof scene.children;
+    scene.renderTerrainTilemap();
+    expect(imagesCreated.every((t) => t === "terrain:grass:seed:0")).toBe(true);
   });
 });
 
@@ -150,8 +198,7 @@ describe("FactoryScene.setContext integration", () => {
       buildings: {}, nextBuildingId: 1, hubOrigin: { x: 31, y: 31 },
       delivered: {}, deliveryHistory: [], unlockedTechs: [], completedQuests: [],
     };
-    const inputState = createInputState();
-    scene.setContext(world, inputState);
+    scene.setContext(world, createInputState());
     expect(() => scene.syncWorld(world)).not.toThrow();
   });
 });
