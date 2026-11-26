@@ -24,6 +24,8 @@ const LABELS = {
 const BUILDING_NAMES: Record<string, string> = {
   smelter: "溶鉱炉", assembler: "組立機", miner: "採掘ドリル",
   belt: "コンベアベルト", splitter: "分配機", hub: "中枢納品ハブ",
+  filter_splitter: "フィルター分配機", underground_belt: "交差ブリッジ",
+  recycler: "不純物処理炉", sensor: "センサー",
 };
 
 export function createInspector(container: HTMLElement, callbacks: InspectorCallbacks): InspectorHandle {
