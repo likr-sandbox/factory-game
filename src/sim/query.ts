@@ -2,7 +2,7 @@
 // Pure TypeScript - ZERO imports or references to Phaser, window, document
 
 import type { WorldState, MaterialId, RecipeId } from "./types";
-import { RECIPE_CATALOG } from "./catalog";
+import { RECIPE_CATALOG, TECH_CATALOG } from "./catalog";
 import { HUB_ORIGIN } from "./world";
 
 // ============================================================================
@@ -242,13 +242,12 @@ export function listRecipes(
 
   for (const [id, recipe] of Object.entries(RECIPE_CATALOG)) {
     const recipeId = id as RecipeId;
-    const isUnlocked = recipe.unlockedByDefault || world.unlockedTechs.some(tech => {
-      // Check if any unlocked tech unlocks this recipe
-      return true; // Simplified: assume all recipes are accessible
+    
+    // Check if recipe is unlocked by default or via a tech
+    const unlocked = recipe.unlockedByDefault || world.unlockedTechs.some(techId => {
+      const tech = TECH_CATALOG[techId];
+      return tech?.unlocks.includes(recipeId);
     });
-
-    // For now, consider recipes unlocked by default or via tech
-    const unlocked = recipe.unlockedByDefault || world.unlockedTechs.length > 0;
 
     if (onlyUnlocked && !unlocked) continue;
 
