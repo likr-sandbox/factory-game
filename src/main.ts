@@ -115,11 +115,17 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     throw new Error("Required DOM element #palette-container not found");
   }
 
-  // Create inspector container within palette container
+  // Create inspector container within palette container (must be done before mountPaletteBar clears contents)
   const inspectorContainer = doc.createElement("div");
   inspectorContainer.id = "inspector-container";
   inspectorContainer.style.cssText = "flex:1;display:flex;align-items:center;justify-content:flex-end;";
   paletteContainer.appendChild(inspectorContainer);
+
+  // Create dedicated palette bar container inside paletteContainer
+  // This prevents mountPaletteBar's innerHTML="" from detaching inspectorContainer
+  const paletteBarContainer = doc.createElement("div");
+  paletteBarContainer.style.cssText = "display:flex;gap:8px;overflow-x:auto;";
+  paletteContainer.insertBefore(paletteBarContainer, inspectorContainer);
 
   // Create scene instance (shared between main loop and Phaser)
   scene = new FactoryScene();
@@ -133,7 +139,8 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     onPausedToggle: (paused) => setSimulationSpeed(paused ? 0 : 1),
   });
 
-  paletteBar = mountPaletteBar(paletteContainer, {
+  // Mount palette bar into dedicated container (not paletteContainer directly)
+  paletteBar = mountPaletteBar(paletteBarContainer, {
     onBuildingSelect: (building) => {
       inputState.selectedBuilding = building;
       inputState.mode = "place";

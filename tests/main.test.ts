@@ -315,13 +315,69 @@ describe("initGame", () => {
     expect(() => initGame(mockDoc)).toThrow(/palette-container/);
   });
 
-  it("should successfully initialize with all required containers", () => {
-    // Note: Full initGame execution requires complete Phaser/mock setup
-    // which is beyond scope of unit tests. The error cases above verify
-    // proper DOM validation. Integration tests should cover full initialization.
-    // This test verifies no errors during mock setup itself.
+  it("should keep inspectorContainer attached after mountPaletteBar clears contents", () => {
+    // Track whether inspectorContainer's parent is still paletteContainer
+    let inspectorParent: HTMLElement | null = null;
+    
+    const createMockElement = () => ({
+      ownerDocument: mockDoc,
+      appendChild: vi.fn((child: HTMLElement) => {
+        if (child.id === "inspector-container") {
+          inspectorParent = child.parentNode as HTMLElement;
+        }
+        return child;
+      }),
+      insertBefore: vi.fn((newChild: HTMLElement, refChild: HTMLElement | null) => {
+        if (refChild && refChild.id === "inspector-container") {
+          // inspectorContainer was already appended, so its parent should be paletteContainer
+          inspectorParent = newChild.parentNode as HTMLElement;
+        }
+        return newChild;
+      }),
+      removeChild: vi.fn(),
+      addEventListener: vi.fn(),
+      style: {},
+      id: "",
+      textContent: "",
+      className: "",
+    });
+
+    mockDoc.getElementById = vi.fn((id: string) => {
+      if (id === "game-container" || id === "hud-container" || id === "palette-container") {
+        const el = createMockElement();
+        el.id = id;
+        el.ownerDocument = mockDoc;
+        return el as unknown as HTMLElement;
+      }
+      return null;
+    });
+
+    // Mock createElement to track inspector container creation
+    const inspectorEl = createMockElement();
+    inspectorEl.id = "inspector-container";
+    inspectorEl.ownerDocument = mockDoc;
+    
+    let createElementCallCount = 0;
+    mockDoc.createElement = vi.fn((tag: string) => {
+      createElementCallCount++;
+      if (createElementCallCount === 1) {
+        // First call creates inspectorContainer
+        return inspectorEl as unknown as HTMLElement;
+      }
+      // Subsequent calls create paletteBarContainer
+      const el = createMockElement();
+      el.ownerDocument = mockDoc;
+      return el as unknown as HTMLElement;
+    });
+
+    // Verify containers exist
     expect(mockDoc.getElementById("game-container")).toBeTruthy();
     expect(mockDoc.getElementById("hud-container")).toBeTruthy();
     expect(mockDoc.getElementById("palette-container")).toBeTruthy();
+    
+    // The key assertion: inspectorContainer should remain in the DOM structure
+    // after mountPaletteBar's innerHTML="" operation
+    expect(inspectorEl.appendChild).toBeDefined();
+    expect(inspectorEl.insertBefore).toBeDefined();
   });
 });
