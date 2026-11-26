@@ -56,6 +56,7 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
   panel.appendChild(recipeSelect);
 
   let currentCoord: { x: number; y: number } | null = null;
+  let lastPopulatedType: "smelter" | "assembler" | null = null;
 
   function populateRecipes(buildingType: "smelter" | "assembler"): void {
     recipeSelect.innerHTML = "";
@@ -69,12 +70,14 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
         recipeSelect.appendChild(opt);
       }
     }
+    lastPopulatedType = buildingType;
   }
 
   function updateBuildingInfo(building: BuildingState | null): void {
     if (!building) {
       infoDiv.textContent = LABELS.none;
       repairBtn.style.display = recipeLabel.style.display = recipeSelect.style.display = "none";
+      lastPopulatedType = null;
       return;
     }
     infoDiv.textContent = BUILDING_NAMES[building.type] + (building.faulted ? ` ${LABELS.faulted}` : "");
@@ -82,10 +85,16 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
 
     if (building.type === "smelter" || building.type === "assembler") {
       recipeLabel.style.display = recipeSelect.style.display = "block";
-      populateRecipes(building.type);
-      recipeSelect.value = building.recipeId ?? "";
+      if (building.type !== lastPopulatedType) {
+        populateRecipes(building.type);
+      }
+      const desiredValue = building.recipeId ?? "";
+      if (recipeSelect.value !== desiredValue) {
+        recipeSelect.value = desiredValue;
+      }
     } else {
       recipeLabel.style.display = recipeSelect.style.display = "none";
+      lastPopulatedType = null;
     }
   }
 
