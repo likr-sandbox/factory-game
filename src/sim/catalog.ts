@@ -46,12 +46,12 @@ export const BUILDING_CATALOG: Record<BuildingType, BuildingEntry> = {
   miner: { type: "miner", nameJa: "採掘ドリル", width: 1, height: 1, unlockedByDefault: true },
   belt: { type: "belt", nameJa: "コンベアベルト", width: 1, height: 1, unlockedByDefault: true },
   splitter: { type: "splitter", nameJa: "分配機", width: 1, height: 1, unlockedByDefault: true },
-  filter_splitter: { type: "filter_splitter", nameJa: "フィルター分配機", width: 1, height: 1, unlockedByDefault: false },
-  underground_belt: { type: "underground_belt", nameJa: "交差ブリッジ", width: 1, height: 1, unlockedByDefault: false },
+  filter_splitter: { type: "filter_splitter", nameJa: "フィルター分配機", width: 1, height: 1, unlockedByDefault: true },
+  underground_belt: { type: "underground_belt", nameJa: "交差ブリッジ", width: 1, height: 1, unlockedByDefault: true },
   smelter: { type: "smelter", nameJa: "溶鉱炉", width: 1, height: 1, unlockedByDefault: true },
   assembler: { type: "assembler", nameJa: "組立機", width: 1, height: 1, unlockedByDefault: false },
-  recycler: { type: "recycler", nameJa: "不純物処理炉", width: 1, height: 1, unlockedByDefault: false },
-  sensor: { type: "sensor", nameJa: "流量・異常センサー", width: 1, height: 1, unlockedByDefault: false },
+  recycler: { type: "recycler", nameJa: "不純物処理炉", width: 1, height: 1, unlockedByDefault: true },
+  sensor: { type: "sensor", nameJa: "流量・異常センサー", width: 1, height: 1, unlockedByDefault: true },
   hub: { type: "hub", nameJa: "中枢納品ハブ", width: 2, height: 2, unlockedByDefault: true },
 };
 

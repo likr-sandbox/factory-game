@@ -21,7 +21,10 @@ describe("Query Functions", () => {
       expect(summary.completedQuests).toEqual([]);
       expect(summary.researchPoints).toBe(0);
       expect(summary.techTree).toBeDefined();
-      expect(summary.techTree.undergroundBelt).toBe(false);
+      expect(summary.techTree.undergroundBelt).toBe(true);
+      expect(summary.techTree.sensor).toBe(true);
+      expect(summary.techTree.recycler).toBe(true);
+      expect(summary.techTree.electronics.assembler).toBe(false);
       expect(summary.tutorialProgress).toBeDefined();
       expect(summary.tutorialProgress.phase).toBe(0);
       expect(summary.activeQuests).toEqual([]);
