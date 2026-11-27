@@ -199,9 +199,9 @@ describe("World Generator", () => {
       expect(world.researchPoints).toBe(0);
     });
 
-    it("should initialize tutorial phase at 0", () => {
+    it("should initialize tutorial phase at 1", () => {
       const world = createWorld(42);
-      expect(world.tutorialPhase).toBe(0);
+      expect(world.tutorialPhase).toBe(1);
     });
 
     it("should initialize empty completed tutorial steps", () => {
