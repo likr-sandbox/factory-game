@@ -3,11 +3,12 @@ import "./style.css";
 import * as Phaser from "phaser";
 import { createWorld } from "./sim/world";
 import { unlockTechAction } from "./sim/actions";
-import type { WorldState } from "./sim/types";
+import type { WorldState, ActionResult } from "./sim/types";
 import { stepTick } from "./sim/engine";
 import { createPhaserConfig } from "./game/config";
 import { FactoryScene } from "./game/FactoryScene";
 import { createInputState, type InputState, repairBuilding, applyRecipe } from "./game/input";
+import { placeBuilding } from "./sim/actions";
 import { mountHud, type HudHandle } from "./ui/hud";
 import { mountPaletteBar, type PaletteBarHandle } from "./ui/paletteBar";
 import { createInspector, type InspectorHandle } from "./ui/inspector";
@@ -127,13 +128,15 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   // Create inspector container within palette container (must be done before mountPaletteBar clears contents)
   const inspectorContainer = doc.createElement("div");
   inspectorContainer.id = "inspector-container";
-  inspectorContainer.style.cssText = "flex:1;display:flex;align-items:center;justify-content:flex-end;";
+  // Use responsive flex styling: flex:0 1 auto allows shrinking, align-items/justify-content for proper layout
+  inspectorContainer.style.cssText = "flex:0 1 auto;display:flex;align-items:center;justify-content:flex-end;";
   paletteContainer.appendChild(inspectorContainer);
 
   // Create dedicated palette bar container inside paletteContainer
   // This prevents mountPaletteBar's innerHTML="" from detaching inspectorContainer
   const paletteBarContainer = doc.createElement("div");
-  paletteBarContainer.style.cssText = "display:flex;gap:8px;overflow-x:auto;";
+  // Use responsive flex styling: flex:1 1 600px allows growth/shrink, min-width:0 prevents overflow
+  paletteBarContainer.style.cssText = "flex:1 1 600px;min-width:0;display:flex;gap:8px;overflow-x:auto;";
   paletteContainer.insertBefore(paletteBarContainer, inspectorContainer);
 
   // Create scene instance (shared between main loop and Phaser)
@@ -153,6 +156,9 @@ export function initGame(doc: Document = globalThis.document as Document): void 
         hud?.update(activeWorld);
         paletteBar?.sync(activeWorld, inputState);
         inspector?.update(activeWorld, inputState.inspectedCoord);
+        paletteBar?.setFeedback(null);
+      } else {
+        paletteBar?.setFeedback("研究ポイントが不足しています");
       }
     },
     onResetWorld: (seed) => {
@@ -170,26 +176,65 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     onBuildingSelect: (building) => {
       inputState.selectedBuilding = building;
       inputState.mode = "place";
+      // Immediately sync and check if building is unlocked
+      paletteBar?.sync(activeWorld, inputState);
+      const result = placeBuilding(activeWorld, {
+        x: 0, y: 0,
+        type: building,
+        direction: inputState.direction,
+      });
+      if (!result.success && result.error.code === "TECH_LOCKED") {
+        paletteBar?.setFeedback("テック未解放のため配置できません");
+      } else {
+        paletteBar?.setFeedback(null);
+      }
     },
     onRotate: () => {
       inputState.direction = rotateDirection(inputState.direction);
+      paletteBar?.sync(activeWorld, inputState);
     },
     onDemolish: () => {
       inputState.mode = "demolish";
+      paletteBar?.sync(activeWorld, inputState);
+      paletteBar?.setFeedback(null);
     },
     onInspectToggle: () => {
       inputState.mode = inputState.mode === "inspect" ? "place" : "inspect";
+      paletteBar?.sync(activeWorld, inputState);
+      paletteBar?.setFeedback(null);
+      // Also update inspector when entering inspect mode
+      if (inputState.mode === "inspect" && inputState.inspectedCoord) {
+        inspector?.update(activeWorld, inputState.inspectedCoord);
+      }
     },
   });
 
   inspector = createInspector(inspectorContainer, {
     onRepair: (x, y) => {
-      repairBuilding(activeWorld, x, y);
-      // Scene will be updated in next frame via syncWorld
+      const result = repairBuilding(activeWorld, x, y);
+      if (!result.success) {
+        paletteBar?.setFeedback(formatActionErrorJa(result.error.code));
+      } else {
+        paletteBar?.setFeedback(null);
+      }
+      // Sync all UI components immediately
+      scene?.syncWorld(activeWorld);
+      hud?.update(activeWorld);
+      paletteBar?.sync(activeWorld, inputState);
+      inspector?.update(activeWorld, inputState.inspectedCoord);
     },
     onSetRecipe: (x, y, recipeId) => {
-      applyRecipe(activeWorld, x, y, recipeId);
-      // Scene will be updated in next frame via syncWorld
+      const result = applyRecipe(activeWorld, x, y, recipeId);
+      if (!result.success) {
+        paletteBar?.setFeedback(formatActionErrorJa(result.error.code));
+      } else {
+        paletteBar?.setFeedback(null);
+      }
+      // Sync all UI components immediately
+      scene?.syncWorld(activeWorld);
+      hud?.update(activeWorld);
+      paletteBar?.sync(activeWorld, inputState);
+      inspector?.update(activeWorld, inputState.inspectedCoord);
     },
   });
 
@@ -209,6 +254,49 @@ export function initGame(doc: Document = globalThis.document as Document): void 
 
   // Create Phaser game instance
   const phaserGame = new Phaser.Game(createPhaserConfig("game-container", scene));
+
+  // Sync canvas dimensions to #game-container immediately after creation
+  const w = gameContainer.clientWidth;
+  const h = gameContainer.clientHeight;
+  if (w > 0 && h > 0) {
+    phaserGame.scale?.resize(w, h);
+    scene.cameras?.main?.setSize?.(w, h);
+  }
+
+  // Attach ResizeObserver / window resize listener for responsive canvas resizing
+  // Guard for non-browser test environments
+  if (typeof globalThis.ResizeObserver !== "undefined" && typeof globalThis.window !== "undefined") {
+    const resizeObserver = new globalThis.ResizeObserver(() => {
+      const rw = gameContainer.clientWidth;
+      const rh = gameContainer.clientHeight;
+      if (rw > 0 && rh > 0) {
+        phaserGame.scale?.resize(rw, rh);
+        scene?.cameras?.main?.setSize?.(rw, rh);
+      }
+    });
+    resizeObserver.observe(gameContainer);
+
+    globalThis.window.addEventListener("resize", () => {
+      const rw = gameContainer.clientWidth;
+      const rh = gameContainer.clientHeight;
+      if (rw > 0 && rh > 0) {
+        phaserGame.scale?.resize(rw, rh);
+        scene?.cameras?.main?.setSize?.(rw, rh);
+      }
+    });
+  }
+
+  // Perform initial UI sync immediately after mounting
+  hud?.update(activeWorld);
+  paletteBar?.sync(activeWorld, inputState);
+  inspector?.update(activeWorld, inputState.inspectedCoord);
+
+  // Subscribe to scene events so canvas clicks (including 調査 tile selection) update UI
+  scene?.events?.on?.("worldMutated", () => {
+    hud?.update(activeWorld);
+    paletteBar?.sync(activeWorld, inputState);
+    inspector?.update(activeWorld, inputState.inspectedCoord);
+  });
 
   // Start animation loop
   let lastTimestamp: number = performance.now();
@@ -238,6 +326,30 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   }
 
   requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Format action error code to Japanese message
+ * @param code - The error code from ActionResult
+ * @returns Japanese error message string
+ */
+export function formatActionErrorJa(code?: string): string {
+  switch (code) {
+    case "NO_DEPOSIT":
+      return "鉱脈がありません";
+    case "TECH_LOCKED":
+      return "テック未解放のため配置できません";
+    case "HUB_PROTECTED":
+      return "中枢納品ハブは保護されています";
+    case "OCCUPIED":
+      return "既に建物が配置されています";
+    case "INVALID_TERRAIN":
+      return "この地形には配置できません";
+    case "OUT_OF_BOUNDS":
+      return "範囲外です";
+    default:
+      return "操作に失敗しました";
+  }
 }
 
 /**
