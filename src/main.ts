@@ -3,12 +3,12 @@ import "./style.css";
 import * as Phaser from "phaser";
 import { createWorld } from "./sim/world";
 import { unlockTechAction } from "./sim/actions";
+import { isBuildingUnlocked } from "./sim/progression";
 import type { WorldState, ActionResult } from "./sim/types";
 import { stepTick } from "./sim/engine";
 import { createPhaserConfig } from "./game/config";
 import { FactoryScene } from "./game/FactoryScene";
 import { createInputState, type InputState, repairBuilding, applyRecipe } from "./game/input";
-import { placeBuilding } from "./sim/actions";
 import { mountHud, type HudHandle } from "./ui/hud";
 import { mountPaletteBar, type PaletteBarHandle } from "./ui/paletteBar";
 import { createInspector, type InspectorHandle } from "./ui/inspector";
@@ -176,14 +176,9 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     onBuildingSelect: (building) => {
       inputState.selectedBuilding = building;
       inputState.mode = "place";
-      // Immediately sync and check if building is unlocked
+      // Immediately sync and check if building is unlocked using read-only check
       paletteBar?.sync(activeWorld, inputState);
-      const result = placeBuilding(activeWorld, {
-        x: 0, y: 0,
-        type: building,
-        direction: inputState.direction,
-      });
-      if (!result.success && result.error.code === "TECH_LOCKED") {
+      if (!isBuildingUnlocked(activeWorld, building)) {
         paletteBar?.setFeedback("テック未解放のため配置できません");
       } else {
         paletteBar?.setFeedback(null);
