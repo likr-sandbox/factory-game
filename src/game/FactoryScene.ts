@@ -348,7 +348,7 @@ export class FactoryScene extends Scene {
       const currentZoom = camera.zoom;
       // Negative deltaY = wheel up = zoom in (+ZOOM_SENSITIVITY)
       // Positive deltaY = wheel down = zoom out (-ZOOM_SENSITIVITY)
-      const newZoom = currentZoom - deltaY * ZOOM_SENSITIVITY;
+      const newZoom = currentZoom - Math.sign(deltaY) * ZOOM_SENSITIVITY;
       camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
     });
   }
