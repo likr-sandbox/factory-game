@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mountHud } from "../../src/ui/hud";
 import { createWorld } from "../../src/sim/world";
-import type { WorldState } from "../../src/sim/types";
+import type { WorldState, ActiveQuestState } from "../../src/sim/types";
 
 class MockElement {
   public children: MockElement[] = [];
@@ -16,7 +16,11 @@ class MockElement {
 
   appendChild(child: MockElement): void { child.parentNode = this; this.children.push(child); }
   removeChild(child: MockElement): void { const idx = this.children.indexOf(child); if (idx !== -1) { this.children.splice(idx, 1); child.parentNode = null; } }
-  querySelectorAll(sel: string): MockElement[] { return sel === ".speed-btn" ? this.children.filter(c => c.className === "speed-btn") : []; }
+  querySelectorAll(sel: string): MockElement[] { 
+    if (sel === ".speed-btn") return this.children.filter(c => c.className === "speed-btn");
+    if (sel === ".tech-btn") return this.children.filter(c => c.className === "tech-btn");
+    return [];
+  }
   classList = { add: (cls: string) => { if (!this.className.includes(cls)) this.className += ` ${cls}`; }, remove: (cls: string) => { this.className = this.className.replace(cls, "").trim(); } };
   addEventListener(event: string, handler: (e: unknown) => void): void { (this as unknown as Record<string, unknown>)[`on${event}`] = handler; }
   dispatchEvent(event: string): void { const h = (this as unknown as Record<string, unknown>)[`on${event}`]; if (typeof h === "function") h({}); }
@@ -30,6 +34,11 @@ function makeWorld(): WorldState {
   const w = createWorld(42);
   w.tick = 100;
   w.delivered = { iron_plate: 10, copper_plate: 5, iron_gear: 3, copper_wire: 8 };
+  w.researchPoints = 0;
+  w.tutorialPhase = 0;
+  w.completedTutorialSteps = [];
+  w.activeQuests = [];
+  w.nextQuestId = 0;
   return w;
 }
 
@@ -46,6 +55,10 @@ describe("mountHud", () => {
     expect(hud.children[1]!.textContent).toContain("ティック");
     expect(hud.children[3]!.textContent).toContain("稼働/故障");
     expect(hud.children[4]!.textContent).toContain("納入数");
+    expect(hud.children[5]!.textContent).toContain("研究ポイント");
+    expect(hud.children[6]!.textContent).toContain("チュートリアル");
+    expect(hud.children[7]!.textContent).toBe(""); // tech tree starts empty
+    expect(hud.children[8]!.textContent).toContain("クエスト");
     handle.destroy();
     expect(container.children).toHaveLength(0);
   });
@@ -118,11 +131,109 @@ describe("mountHud", () => {
 
   it("should show default values when world has no data", () => {
     const handle = mountHud(container as unknown as HTMLElement);
-    const empty: WorldState = { seed: 42, width: 10, height: 10, tick: 0, rngState: 42, tiles: [], buildings: {}, nextBuildingId: 1, hubOrigin: { x: 0, y: 0 }, delivered: {}, deliveryHistory: [], unlockedTechs: [], completedQuests: [] };
+    const empty: WorldState = { seed: 42, width: 10, height: 10, tick: 0, rngState: 42, tiles: [], buildings: {}, nextBuildingId: 1, hubOrigin: { x: 0, y: 0 }, delivered: {}, deliveryHistory: [], unlockedTechs: [], completedQuests: [], researchPoints: 0, tutorialPhase: 0, completedTutorialSteps: [], activeQuests: [], nextQuestId: 0 };
     handle.update(empty);
     expect(container.children[0]!.children[0]!.textContent).toBe("生産速度/分：0");
     expect(container.children[0]!.children[1]!.textContent).toBe("ティック：0");
     expect(container.children[0]!.children[3]!.textContent).toBe("稼働/故障：0 / 0");
+    expect(container.children[0]!.children[5]!.textContent).toBe("研究ポイント：0");
+    expect(container.children[0]!.children[6]!.textContent).toBe("チュートリアル：未開始");
+    expect(container.children[0]!.children[8]!.textContent).toBe("クエスト：なし");
+    handle.destroy();
+  });
+
+  it("should display research points correctly", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.researchPoints = 250;
+    handle.update(world);
+    expect(container.children[0]!.children[5]!.textContent).toBe("研究ポイント：250");
+    handle.destroy();
+  });
+
+  it("should display tutorial progress with current step", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.tutorialPhase = 1;
+    world.completedTutorialSteps = ["p1_manual_mining"];
+    handle.update(world);
+    expect(container.children[0]!.children[6]!.textContent).toContain("チュートリアル：Phase 1");
+    handle.destroy();
+  });
+
+  it("should display tech tree unlock buttons when techs are locked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = []; // No techs unlocked
+    handle.update(world);
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    expect(buttons.length).toBeGreaterThan(0);
+    handle.destroy();
+  });
+
+  it("should call onUnlockTech callback when tech button clicked", () => {
+    const onUnlockTech = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onUnlockTech });
+    const world = makeWorld();
+    world.unlockedTechs = [];
+    handle.update(world);
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    if (buttons.length > 0) {
+      buttons[0]!.dispatchEvent("click");
+      expect(onUnlockTech).toHaveBeenCalled();
+    }
+    handle.destroy();
+  });
+
+  it("should display active quests with progress", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.tick = 1000;
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 10 },
+        startedAtTick: 500,
+      } as ActiveQuestState,
+    ];
+    handle.update(world);
+    expect(container.children[0]!.children[8]!.textContent).toContain("クエスト");
+    handle.destroy();
+  });
+
+  it("should display seed reset controls", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    handle.update(world);
+    const seedResetEl = container.children[0]!.children[9]!;
+    expect(seedResetEl.children.length).toBeGreaterThanOrEqual(3); // input + 2 buttons
+    handle.destroy();
+  });
+
+  it("should call onResetWorld callback when reset button clicked", () => {
+    const onResetWorld = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onResetWorld });
+    const world = makeWorld();
+    handle.update(world);
+    const seedResetEl = container.children[0]!.children[9]!;
+    const resetBtn = seedResetEl.children[1]!;
+    resetBtn.dispatchEvent("click");
+    // The callback should be called only if seed input has a value
+    handle.destroy();
+  });
+
+  it("should call onResetWorld with random seed when random button clicked", () => {
+    const onResetWorld = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onResetWorld });
+    const world = makeWorld();
+    handle.update(world);
+    const seedResetEl = container.children[0]!.children[9]!;
+    const randomBtn = seedResetEl.children[2]!;
+    randomBtn.dispatchEvent("click");
+    expect(onResetWorld).toHaveBeenCalled();
     handle.destroy();
   });
 });

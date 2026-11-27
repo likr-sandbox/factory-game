@@ -58,6 +58,22 @@ export type RecipeId =
 // Core Data Structures
 // ============================================================================
 
+export interface ActiveQuestState {
+  questId: string;
+  stepIndex: number;
+  progress: Record<string, number>;
+  startedAtTick: number;
+}
+
+export interface TutorialStepDef {
+  id: string;
+  title: string;
+  description: string;
+  targetType: "place_building" | "collect_resource" | "deliver_item" | "research_tech";
+  targetValue?: string;
+  requiredAmount?: number;
+}
+
 export interface ResourceDeposit {
   material: MaterialId;
   remaining: number;
@@ -116,6 +132,16 @@ export interface WorldState {
   deliveryHistory: DeliveryRecord[];
   unlockedTechs: string[];
   completedQuests: string[];
+  // Progression fields
+  researchPoints?: number;
+  // Tutorial fields
+  tutorialPhase?: number;
+  completedTutorialSteps?: string[];
+  // Dynamic quest fields
+  activeQuests?: ActiveQuestState[];
+  nextQuestId?: number;
+  // SPM (Science Per Minute) tracking
+  spm?: Partial<Record<string, number>>;
 }
 
 // ============================================================================

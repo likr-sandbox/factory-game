@@ -3,10 +3,16 @@
 
 import type { WorldState } from "../sim/types";
 import { getFactorySummary } from "../sim/query";
+import { getTutorialProgress, getTechTreeStatus } from "../sim/progression";
+import { getActiveQuests, getQuestProgress } from "../sim/quests";
+
+const QUEST_DURATION_TICKS = 6000;
 
 export interface HudOptions {
   onSpeedChange?: (speed: number) => void;
   onPausedToggle?: (paused: boolean) => void;
+  onUnlockTech?: (techId: string) => void;
+  onResetWorld?: (seed: number) => void;
 }
 
 export interface HudHandle {
@@ -99,11 +105,68 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   deliveredEl.className = "hud-item delivered-counters";
   deliveredEl.textContent = "納入数：--";
 
+  // Research points display
+  const rpEl = doc.createElement("span");
+  rpEl.className = "hud-item research-points";
+  rpEl.textContent = "研究ポイント：0";
+
+  // Tutorial progress display
+  const tutorialEl = doc.createElement("span");
+  tutorialEl.className = "hud-item tutorial-display";
+  tutorialEl.textContent = "チュートリアル：--";
+
+  // Tech tree unlock buttons container
+  const techTreeEl = doc.createElement("span");
+  techTreeEl.className = "hud-item tech-tree";
+
+  // Active quests display
+  const questsEl = doc.createElement("span");
+  questsEl.className = "hud-item quests-display";
+  questsEl.textContent = "クエスト：なし";
+
+  // Seed reset controls
+  const seedResetEl = doc.createElement("span");
+  seedResetEl.className = "hud-item seed-reset";
+
+  const seedInput = doc.createElement("input");
+  seedInput.type = "number";
+  seedInput.className = "seed-input";
+  seedInput.placeholder = "シード値";
+  seedInput.style.width = "80px";
+
+  const resetBtn = doc.createElement("button");
+  resetBtn.className = "reset-btn";
+  resetBtn.textContent = "リセット";
+  resetBtn.addEventListener("click", () => {
+    const seedVal = parseInt(seedInput.value, 10);
+    if (!isNaN(seedVal)) {
+      options.onResetWorld?.(seedVal);
+    }
+  });
+
+  const randomBtn = doc.createElement("button");
+  randomBtn.className = "random-btn";
+  randomBtn.textContent = "ランダム";
+  randomBtn.addEventListener("click", () => {
+    const randomSeed = Math.floor(Math.random() * 2147483647);
+    seedInput.value = String(randomSeed);
+    options.onResetWorld?.(randomSeed);
+  });
+
+  seedResetEl.appendChild(seedInput);
+  seedResetEl.appendChild(resetBtn);
+  seedResetEl.appendChild(randomBtn);
+
   hudEl.appendChild(spmEl);
   hudEl.appendChild(tickEl);
   hudEl.appendChild(speedControlsEl);
   hudEl.appendChild(countEl);
   hudEl.appendChild(deliveredEl);
+  hudEl.appendChild(rpEl);
+  hudEl.appendChild(tutorialEl);
+  hudEl.appendChild(techTreeEl);
+  hudEl.appendChild(questsEl);
+  hudEl.appendChild(seedResetEl);
 
   container.appendChild(hudEl);
 
@@ -146,6 +209,64 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
         deliveredParts.push(`${m.label}:${amount}`);
       }
       deliveredEl.textContent = `納入数：${deliveredParts.join(", ")}`;
+
+      // Update research points
+      rpEl.textContent = `研究ポイント：${summary.researchPoints}`;
+
+      // Update tutorial progress
+      const tutorialProg = getTutorialProgress(world);
+      if (tutorialProg.phase === 0) {
+        tutorialEl.textContent = "チュートリアル：未開始";
+      } else {
+        const phaseLabel = `Phase ${tutorialProg.phase}`;
+        if (tutorialProg.currentStep) {
+          tutorialEl.textContent = `チュートリアル：${phaseLabel} - ${tutorialProg.currentStep.titleJa}`;
+        } else if (tutorialProg.isComplete) {
+          tutorialEl.textContent = `チュートリアル：${phaseLabel} 完了`;
+        } else {
+          tutorialEl.textContent = `チュートリアル：${phaseLabel}`;
+        }
+      }
+
+      // Update tech tree unlock buttons
+      techTreeEl.textContent = "";
+      const techStatus = getTechTreeStatus(world);
+      const techButtons: Array<{ techId: string; label: string; unlocked: boolean }> = [
+        { techId: "underground_belt", label: "地下ベルト", unlocked: techStatus.undergroundBelt },
+        { techId: "filter_splitter", label: "フィルター分配機", unlocked: techStatus.filterSplitter },
+        { techId: "sensor", label: "センサー", unlocked: techStatus.sensor },
+        { techId: "recycler", label: "不純物処理炉", unlocked: techStatus.recycler },
+        { techId: "assembler", label: "組立機", unlocked: techStatus.electronics.assembler },
+      ];
+      for (const t of techButtons) {
+        if (!t.unlocked) {
+          const btn = doc.createElement("button");
+          btn.className = "tech-btn";
+          btn.textContent = `${t.label}(アンロック)`;
+          btn.addEventListener("click", () => {
+            options.onUnlockTech?.(t.techId);
+          });
+          techTreeEl.appendChild(btn);
+        }
+      }
+
+      // Update active quests
+      const activeQuests = getActiveQuests(world);
+      if (activeQuests.length === 0) {
+        questsEl.textContent = "クエスト：なし";
+      } else {
+        const questLabels: string[] = [];
+        for (const quest of activeQuests) {
+          const progress = getQuestProgress(quest);
+          const parts: string[] = [];
+          for (const [material, prog] of Object.entries(progress)) {
+            parts.push(`${prog.current}/${prog.target}`);
+          }
+          const remainingTicks = QUEST_DURATION_TICKS - (world.tick - quest.startedAtTick);
+          questLabels.push(`[${parts.join(", ")} 残り${Math.floor(remainingTicks / 600)}分]`);
+        }
+        questsEl.textContent = `クエスト：${questLabels.join(", ")}`;
+      }
     },
 
     destroy(): void {

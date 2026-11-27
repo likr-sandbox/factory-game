@@ -19,7 +19,8 @@ export type MutateToolName =
   | "place_belt_line"
   | "remove_area"
   | "set_recipe"
-  | "batch_actions";
+  | "batch_actions"
+  | "unlock_tech";
 
 export type WebMcpToolName = ReadToolName | MutateToolName;
 

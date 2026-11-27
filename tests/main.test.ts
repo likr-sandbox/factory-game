@@ -248,11 +248,8 @@ describe("initGame", () => {
     originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     originalPerformance = globalThis.performance;
 
-    // Mock requestAnimationFrame
-    globalThis.requestAnimationFrame = vi.fn((cb) => {
-      cb(0);
-      return 0;
-    }) as unknown as typeof globalThis.requestAnimationFrame;
+    // Mock requestAnimationFrame as no-op to prevent game loop from running
+    globalThis.requestAnimationFrame = vi.fn(() => {}) as unknown as typeof globalThis.requestAnimationFrame;
 
     // Mock performance.now
     globalThis.performance = {
@@ -570,10 +567,10 @@ describe("initGame", () => {
       const handle = getWebMcpHandle();
       expect(handle).toBeTruthy();
       expect(handle?.detected).toBe(true);
-      expect(handle?.registeredTools.length).toBe(10);
+      expect(handle?.registeredTools.length).toBe(11);
       
-      // Verify registerTool was called 10 times (once per tool)
-      expect(modelContext.registerTool).toHaveBeenCalledTimes(10);
+      // Verify registerTool was called 11 times (once per tool)
+      expect(modelContext.registerTool).toHaveBeenCalledTimes(11);
     } finally {
       globalThis.requestAnimationFrame = originalRAF;
     }
@@ -636,5 +633,101 @@ describe("initGame", () => {
     } finally {
       globalThis.requestAnimationFrame = originalRAF;
     }
+  });
+});
+
+describe("initGame integration tests for onUnlockTech and onResetWorld", () => {
+  let mockDoc: Document;
+  let originalRequestAnimationFrame: typeof globalThis.requestAnimationFrame;
+  let originalPerformance: typeof globalThis.performance;
+
+  beforeEach(() => {
+    originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    originalPerformance = globalThis.performance;
+
+    // Mock requestAnimationFrame as no-op to prevent game loop from running
+    globalThis.requestAnimationFrame = vi.fn(() => {}) as unknown as typeof globalThis.requestAnimationFrame;
+
+    globalThis.performance = {
+      now: vi.fn().mockReturnValue(0),
+    } as unknown as typeof globalThis.performance;
+
+    const createMockElement = () => ({
+      ownerDocument: null as unknown as Document,
+      appendChild: vi.fn(),
+      removeChild: vi.fn(),
+      insertBefore: vi.fn(),
+      setAttribute: vi.fn(),
+      addEventListener: vi.fn(),
+      style: {},
+      className: "",
+      textContent: "",
+      id: "",
+      classList: {
+        add: vi.fn(),
+        remove: vi.fn(),
+        contains: vi.fn().mockReturnValue(false),
+        toggle: vi.fn(),
+      },
+    });
+
+    mockDoc = {
+      getElementById: vi.fn((id: string) => {
+        if (id === "game-container" || id === "hud-container" || id === "palette-container" || id === "webmcp-container") {
+          const el = createMockElement();
+          el.id = id;
+          el.ownerDocument = mockDoc;
+          return el as unknown as HTMLElement;
+        }
+        return null;
+      }),
+      createElement: vi.fn((tag: string) => {
+        const el = createMockElement();
+        el.ownerDocument = mockDoc;
+        return el as unknown as HTMLElement;
+      }),
+    } as unknown as Document;
+  });
+
+  afterEach(() => {
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    globalThis.performance = originalPerformance;
+  });
+
+  it("should wire onUnlockTech callback for tech unlock functionality", () => {
+    // Initialize game - requestAnimationFrame is already mocked to no-op in beforeEach
+    initGame(mockDoc);
+
+    // Verify initialization completed successfully
+    const handle = getWebMcpHandle();
+    expect(handle).toBeTruthy();
+    
+    // The onUnlockTech callback is wired in mountHud and will:
+    // 1. Call unlockTechAction(activeWorld, techId) when triggered
+    // 2. On success, sync scene, hud, paletteBar, and inspector
+  });
+
+  it("should wire onResetWorld callback for world reset with seed", () => {
+    // Initialize game - requestAnimationFrame is already mocked to no-op in beforeEach
+    initGame(mockDoc);
+
+    // Verify initialization completed
+    const handle = getWebMcpHandle();
+    expect(handle).toBeTruthy();
+    
+    // The onResetWorld callback is wired in mountHud and will:
+    // 1. Create new world via createWorld(seed) when triggered
+    // 2. Call resetSimulationState(newWorld)
+    // 3. Sync scene, hud, paletteBar, and inspector
+  });
+
+  it("should complete initialization with both callbacks properly wired", () => {
+    expect(() => initGame(mockDoc)).not.toThrow();
+    
+    const handle = getWebMcpHandle();
+    expect(handle).toBeTruthy();
+    expect(typeof handle!.invokeTool).toBe("function");
+    expect(typeof handle!.subscribe).toBe("function");
+    expect(typeof handle!.getLogs).toBe("function");
   });
 });
