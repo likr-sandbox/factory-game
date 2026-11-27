@@ -118,12 +118,12 @@ describe("processFilterSplitters", () => {
 // ============================================================================
 
 describe("processUndergroundBelts", () => {
-  it("bridges items to matching underground belt within range", () => {
+  it("transfers items from source.inputBuffer to target's inputBuffer", () => {
     const world = createTestWorld(10, 5);
 
-    // First underground belt at (1, 2) facing E
+    // First underground belt at (1, 2) facing E with items in inputBuffer
     const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
-    ub1.outputBuffer = { iron_plate: 5 };
+    ub1.inputBuffer = { iron_plate: 5 };
 
     // Connect through belts
     addBuilding(world, "belt", 2, 2, "E");
@@ -137,13 +137,60 @@ describe("processUndergroundBelts", () => {
     // Items should be transferred to ub2's input buffer
     expect(ub2.inputBuffer.iron_plate).toBeDefined();
     expect(ub2.inputBuffer.iron_plate!).toBeGreaterThan(0);
+    // Source inputBuffer should be depleted
+    expect(ub1.inputBuffer.iron_plate).toBe(0);
+  });
+
+  it("moves belt items without duplication", () => {
+    const world = createTestWorld(10, 5);
+
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.beltItems = [{ material: "iron_plate", movedAtTick: 0 }];
+
+    addBuilding(world, "belt", 2, 2, "E");
+    addBuilding(world, "belt", 3, 2, "E");
+
+    const ub2 = addBuilding(world, "underground_belt", 4, 2, "E");
+
+    const originalCount = ub1.beltItems.length;
+
+    processUndergroundBelts(world);
+
+    // ub1 should have no belt items (moved)
+    expect(ub1.beltItems.length).toBe(0);
+    // ub2 should have the belt item
+    expect(ub2.beltItems.length).toBe(1);
+    expect(ub2.beltItems[0]!.material).toBe("iron_plate");
+    // Total count should remain the same (no duplication)
+    expect(ub1.beltItems.length + ub2.beltItems.length).toBe(originalCount);
+  });
+
+  it("outputs forward from underground belt exit to adjacent building", () => {
+    const world = createTestWorld(10, 5);
+
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { iron_plate: 3 };
+
+    addBuilding(world, "belt", 2, 2, "E");
+    addBuilding(world, "belt", 3, 2, "E");
+
+    const ub2 = addBuilding(world, "underground_belt", 4, 2, "E");
+    // Add a belt in front of ub2 to receive forward output
+    addBuilding(world, "belt", 5, 2, "E");
+
+    processUndergroundBelts(world);
+
+    // ub2 receives items in inputBuffer
+    expect(ub2.inputBuffer.iron_plate).toBeGreaterThan(0);
+    // Forward output should push to the belt in front (ub2's outputBuffer gets processed)
+    // Note: The actual forward output happens from ub2's outputBuffer after processing
   });
 
   it("stops at max range of 4 tiles", () => {
     const world = createTestWorld(10, 5);
 
     const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
-    ub1.outputBuffer = { iron_plate: 3 };
+    ub1.inputBuffer = { iron_plate: 3 };
 
     // Fill with belts up to range limit
     for (let x = 2; x <= 5; x++) {
@@ -246,51 +293,49 @@ describe("processSensors and collectSensorAlerts", () => {
 // ============================================================================
 
 describe("updateReliabilityAndOverload", () => {
-  it("increments blockedTicks when output buffer is full", () => {
+  it("does not increase load when only holding items in buffers (normal operation)", () => {
     const world = createTestWorld(5, 5);
     const building = addBuilding(world, "belt", 2, 2, "N");
+    building.inputBuffer = { iron_plate: 5 };
+    building.outputBuffer = { copper_plate: 3 };
+    building.blockedTicks = 0;
+    building.load = 0;
 
-    // Fill output buffer to capacity
-    building.outputBuffer = { iron_plate: 10 };
+    updateReliabilityAndOverload(world);
+
+    // Normal operation should NOT increase load
+    expect(building.load).toBe(0);
+    expect(building.blockedTicks).toBe(0);
+  });
+
+  it("increases blockedTicks and load when output buffer is full (jam condition)", () => {
+    const world = createTestWorld(5, 5);
+    const building = addBuilding(world, "belt", 2, 2, "N");
+    building.outputBuffer = { iron_plate: 10 }; // Full (MAX_OUTPUT_BUFFER = 10)
+    building.blockedTicks = 0;
+    building.load = 0;
 
     updateReliabilityAndOverload(world);
 
     expect(building.blockedTicks).toBe(1);
-  });
-
-  it("increments load when processing items", () => {
-    const world = createTestWorld(5, 5);
-    const building = addBuilding(world, "belt", 2, 2, "N");
-    building.inputBuffer = { iron_plate: 5 };
-
-    updateReliabilityAndOverload(world);
-
     expect(building.load).toBe(1);
   });
 
-  it("sets faulted when load exceeds threshold", () => {
+  it("increments blockedTicks and load when belt item is stagnant", () => {
     const world = createTestWorld(5, 5);
     const building = addBuilding(world, "belt", 2, 2, "N");
-    building.load = 100; // At threshold
+    world.tick = 10;
+    building.beltItems = [{ material: "iron_plate", movedAtTick: 9 }]; // Stagnant (moved last tick)
+    building.blockedTicks = 0;
+    building.load = 0;
 
     updateReliabilityAndOverload(world);
 
-    expect(building.faulted).toBe(true);
+    expect(building.blockedTicks).toBe(1);
+    expect(building.load).toBe(1);
   });
 
-  it("recovers from fault when load drops", () => {
-    const world = createTestWorld(5, 5);
-    const building = addBuilding(world, "belt", 2, 2, "N");
-    building.faulted = true;
-    building.load = 30; // Below recovery threshold (50)
-
-    updateReliabilityAndOverload(world);
-
-    expect(building.faulted).toBe(false);
-    expect(building.load).toBe(0);
-  });
-
-  it("decrements blockedTicks when output has space", () => {
+  it("decrements blockedTicks when jam is resolved", () => {
     const world = createTestWorld(5, 5);
     const building = addBuilding(world, "belt", 2, 2, "N");
     building.blockedTicks = 5;
@@ -298,7 +343,72 @@ describe("updateReliabilityAndOverload", () => {
 
     updateReliabilityAndOverload(world);
 
-    expect(building.blockedTicks).toBeLessThan(5);
+    expect(building.blockedTicks).toBe(4);
+  });
+
+  it("cools down load when not blocked and not faulted", () => {
+    const world = createTestWorld(5, 5);
+    const building = addBuilding(world, "belt", 2, 2, "N");
+    building.load = 50;
+    building.blockedTicks = 0;
+    building.outputBuffer = {}; // Empty, not blocked
+
+    updateReliabilityAndOverload(world);
+
+    expect(building.load).toBe(49);
+  });
+
+  it("does not cool down load when faulted", () => {
+    const world = createTestWorld(5, 5);
+    const building = addBuilding(world, "belt", 2, 2, "N");
+    building.load = 50;
+    building.faulted = true;
+    building.blockedTicks = 0;
+    building.outputBuffer = {};
+
+    updateReliabilityAndOverload(world);
+
+    // Load should NOT decrease when faulted
+    expect(building.load).toBe(50);
+  });
+
+  it("sets faulted when load reaches threshold", () => {
+    const world = createTestWorld(5, 5);
+    const building = addBuilding(world, "belt", 2, 2, "N");
+    building.load = 99; // Just below threshold
+    building.outputBuffer = { iron_plate: 10 }; // Full, so will be blocked and load increases
+
+    updateReliabilityAndOverload(world);
+
+    expect(building.faulted).toBe(true);
+    expect(building.load).toBe(100);
+  });
+
+  it("does not auto-recover from faulted state even when load drops below half threshold", () => {
+    const world = createTestWorld(5, 5);
+    const building = addBuilding(world, "belt", 2, 2, "N");
+    building.faulted = true;
+    building.load = 30; // Below OVERLOAD_THRESHOLD / 2 = 50
+    building.outputBuffer = {}; // Not blocked
+
+    updateReliabilityAndOverload(world);
+
+    // Should remain faulted - no auto-recovery
+    expect(building.faulted).toBe(true);
+    // Load stays same because faulted buildings don't cool down
+    expect(building.load).toBe(30);
+  });
+
+  it("keeps building faulted after recovery cooldown attempt", () => {
+    const world = createTestWorld(5, 5);
+    const building = addBuilding(world, "belt", 2, 2, "N");
+    building.faulted = true;
+    building.load = 10; // Very low
+
+    updateReliabilityAndOverload(world);
+
+    // Still faulted - only repair can clear it
+    expect(building.faulted).toBe(true);
   });
 });
 

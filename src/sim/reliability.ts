@@ -1,7 +1,7 @@
 // Reliability and specialized logistics mechanics
 // Pure TypeScript - ZERO imports or references to Phaser, window, document
 
-import type { WorldState, BuildingState, Direction, MaterialId } from "./types";
+import type { WorldState, BuildingState, Direction, MaterialId, BeltItem } from "./types";
 import { directionDelta, inBounds, getTile } from "./world";
 
 const OVERLOAD_THRESHOLD = 100;
@@ -66,12 +66,41 @@ export function processUndergroundBelts(world: WorldState): void {
 }
 
 function transferUndergroundItems(world: WorldState, source: BuildingState, target: BuildingState): void {
-  for (const [materialStr, amount] of Object.entries(source.outputBuffer)) {
+  // Transfer from source.inputBuffer to target's inputBuffer
+  for (const [materialStr, amount] of Object.entries(source.inputBuffer)) {
     if ((amount || 0) <= 0) continue;
-    transferItem(source.outputBuffer, target, materialStr as MaterialId, amount!);
+    transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!);
   }
+  
+  // Move belt items from source to target (not copy - remove from source)
+  const transferredItems: BeltItem[] = [];
   for (const item of source.beltItems) {
-    if (canAcceptBeltItem(target, item.material)) target.beltItems.push({ ...item });
+    if (canAcceptBeltItem(target, item.material)) {
+      transferredItems.push(item);
+    }
+  }
+  
+  // Remove moved items from source and add to target
+  for (const item of transferredItems) {
+    const idx = source.beltItems.indexOf(item);
+    if (idx !== -1) {
+      source.beltItems.splice(idx, 1);
+      target.beltItems.push({ ...item });
+    }
+  }
+  
+  // Forward output: push items from target's outputBuffer to buildings in front
+  const { dx, dy } = directionDelta(target.direction);
+  const forwardX = target.x + dx;
+  const forwardY = target.y + dy;
+  if (inBounds(world, forwardX, forwardY)) {
+    const forwardTile = getTile(world, forwardX, forwardY);
+    if (forwardTile?.buildingId) {
+      const forwardBuilding = world.buildings[forwardTile.buildingId];
+      if (forwardBuilding) {
+        pushOutputToBuilding(world, target, forwardBuilding);
+      }
+    }
   }
 }
 
@@ -118,27 +147,8 @@ export interface SensorAlert {
 
 /** Process sensors: monitor adjacent tiles for jams, overload faults, and ore depletion. */
 export function processSensors(world: WorldState): void {
-  for (const building of Object.values(world.buildings)) {
-    if (building.type !== "sensor") continue;
-    for (const dir of ["N", "E", "S", "W"] as Direction[]) {
-      const { dx, dy } = directionDelta(dir);
-      const adjX = building.x + dx, adjY = building.y + dy;
-      if (!inBounds(world, adjX, adjY)) continue;
-
-      const adjTile = getTile(world, adjX, adjY);
-      if (!adjTile?.buildingId) continue;
-      const adjBuilding = world.buildings[adjTile.buildingId];
-      if (!adjBuilding) continue;
-
-      // Check jam, fault, depletion conditions
-      if (adjBuilding.blockedTicks >= 30) {}
-      if (adjBuilding.faulted) {}
-      if (adjBuilding.type === "miner") {
-        const tile = getTile(world, adjBuilding.x, adjBuilding.y);
-        if (tile?.deposit && tile.deposit.remaining <= 0) {}
-      }
-    }
-  }
+  // Sensor monitoring is handled by collectSensorAlerts
+  // This function exists for API consistency but has no active processing
 }
 
 /** Collect sensor alerts from all sensors in the world. */
@@ -179,21 +189,33 @@ export function updateReliabilityAndOverload(world: WorldState): void {
     if (building.type === "hub") continue;
 
     const outputCount = countBufferItems(building.outputBuffer);
-    if (outputCount >= MAX_OUTPUT_BUFFER) {
+    const isOutputFull = outputCount >= MAX_OUTPUT_BUFFER;
+    
+    // Check if belt item at front is stagnant (movedAtTick same as previous tick)
+    const isFirstItemStagnant = building.beltItems.length > 0 && 
+      building.beltItems[0]!.movedAtTick === world.tick - 1;
+    
+    const isBlocked = isOutputFull || isFirstItemStagnant;
+
+    if (isBlocked) {
       building.blockedTicks++;
-    } else if (building.beltItems.length > 0) {
-      const firstItem = building.beltItems[0];
-      if (firstItem && firstItem.movedAtTick === world.tick - 1) building.blockedTicks++;
+      building.load++;
+    } else {
+      // Not blocked: decrement blockedTicks
+      if (building.blockedTicks > 0) {
+        building.blockedTicks = Math.max(0, building.blockedTicks - 1);
+      }
+      // Cool down load only if not faulted
+      if (!building.faulted && building.load > 0) {
+        building.load--;
+      }
     }
 
-    if (countBufferItems(building.inputBuffer) > 0 || outputCount > 0) building.load++;
-    if (building.blockedTicks > 0 && outputCount < MAX_OUTPUT_BUFFER) building.blockedTicks = Math.max(0, building.blockedTicks - 1);
-
-    if (building.load >= OVERLOAD_THRESHOLD && !building.faulted) building.faulted = true;
-    if (building.faulted && building.load < OVERLOAD_THRESHOLD / 2) {
-      building.faulted = false;
-      building.load = 0;
+    // Set faulted when load exceeds threshold
+    if (building.load >= OVERLOAD_THRESHOLD) {
+      building.faulted = true;
     }
+    // Note: faulted is ONLY cleared by repair action, not by low load
   }
 }
 
