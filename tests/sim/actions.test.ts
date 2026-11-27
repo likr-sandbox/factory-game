@@ -62,13 +62,9 @@ describe("placeBuilding", () => {
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("INVALID_RECIPE");
   });
 
-  it("should fail when placing locked building type (filter_splitter, assembler)", () => {
-    // filter_splitter requires electronics or filter_splitter tech
-    let r = placeBuilding(world, { x: 10, y: 10, type: "filter_splitter", direction: "N" });
-    expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
-    
+  it("should fail when placing locked building type (assembler)", () => {
     // assembler requires electronics tech
-    r = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
+    const r = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
   });
 

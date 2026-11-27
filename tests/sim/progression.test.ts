@@ -92,10 +92,10 @@ describe("Tech Tree Unlocks", () => {
   it("should check building unlock status", () => {
     const w = createWorld();
     expect(isBuildingUnlocked(w, "belt")).toBe(true);
-    expect(isBuildingUnlocked(w, "underground_belt")).toBe(false);
-    w.researchPoints = 200;
-    unlockTech(w, "underground_belt");
-    expect(isBuildingUnlocked(w, "underground_belt")).toBe(true);
+    expect(isBuildingUnlocked(w, "assembler")).toBe(false);
+    w.researchPoints = 300;
+    unlockTech(w, "electronics");
+    expect(isBuildingUnlocked(w, "assembler")).toBe(true);
   });
 
   it("should check recipe unlock status", () => {
@@ -121,7 +121,8 @@ describe("Tech Tree Unlocks", () => {
   it("should get tech tree status", () => {
     const w = createWorld();
     let s = getTechTreeStatus(w);
-    expect(s.undergroundBelt).toBe(false);
+    expect(s.sensor).toBe(true);
+    expect(s.recycler).toBe(true);
     expect(s.electronics.assembler).toBe(false);
     w.researchPoints = 1000;
     unlockTech(w, "electronics");
