@@ -2,6 +2,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { WorldState, BuildingState, ResourceDeposit, BuildingType, Direction } from "../../src/sim/types";
 import { FactoryScene } from "../../src/game/FactoryScene";
+import { PlacementGhost } from "../../src/game/overlays";
+import { Scene } from "phaser";
 
 // Mock Phaser GameObjects
 const mockGraphics = {
@@ -30,8 +32,8 @@ const mockSprite = {
   setTexture: vi.fn(),
 };
 
-vi.mock("phaser", () => ({
-  Scene: class MockScene {
+vi.mock("phaser", () => {
+  const MockScene = class {
     cameras = { 
       main: { 
         setBounds: vi.fn(), 
@@ -51,7 +53,32 @@ vi.mock("phaser", () => ({
       },
     };
     textures = {
-      createCanvas: vi.fn(),
+      createCanvas: vi.fn().mockReturnValue({
+        getContext: vi.fn().mockReturnValue({
+          fillStyle: "",
+          strokeStyle: "",
+          lineWidth: 1,
+          font: "",
+          fillRect: vi.fn(),
+          fillCircle: vi.fn(),
+          beginPath: vi.fn(),
+          moveTo: vi.fn(),
+          lineTo: vi.fn(),
+          closePath: vi.fn(),
+          stroke: vi.fn(),
+          fill: vi.fn(),
+          arc: vi.fn(),
+          rect: vi.fn(),
+          quadraticCurveTo: vi.fn(),
+          bezierCurveTo: vi.fn(),
+          ellipse: vi.fn(),
+          strokeRect: vi.fn(),
+          fillText: vi.fn(),
+          clearRect: vi.fn(),
+          measureText: vi.fn().mockReturnValue({ width: 0 }),
+        }),
+        refresh: vi.fn(),
+      }),
     };
     add = {
       sprite: vi.fn().mockReturnValue(mockSprite),
@@ -66,8 +93,32 @@ vi.mock("phaser", () => ({
     constructor(name: string) {
       // Mock constructor
     }
-  },
-}));
+  };
+
+  const PhaserMock = {
+    Scene: MockScene,
+    GameObjects: {},
+    Input: {
+      Keyboard: {
+        KeyCodes: {
+          W: "W",
+          A: "A",
+          S: "S",
+          D: "D",
+        },
+      },
+    },
+    AUTO: "auto",
+  };
+
+  // Export both named and default exports, including Phaser namespace
+  return {
+    ...PhaserMock,
+    Scene: MockScene,
+    default: PhaserMock,
+    Phaser: PhaserMock, // Export Phaser as named export for namespace access
+  };
+});
 
 function createMockWorld(overrides?: Partial<WorldState>): WorldState {
   return {
@@ -174,17 +225,11 @@ describe("FactoryScene", () => {
         dragStartY: null,
       });
 
-      // Call setupCameraControls directly (bypassing create() which needs textures)
-      // The camera centering logic is in setupCameraControls
-      // Since we can't easily call private methods, we verify through the mock
-      // that centerOn would be called with the correct values when create() runs
-      
-      // For now, verify the calculation is correct: (31 + 1) * 32 = 1024
-      const hubOrigin = world.hubOrigin;
-      const expectedX = (hubOrigin.x + 1) * 32;
-      const expectedY = (hubOrigin.y + 1) * 32;
-      expect(expectedX).toBe(1024);
-      expect(expectedY).toBe(1024);
+      // Call create() which will set up camera controls
+      scene.create();
+
+      // Verify camera.centerOn was called with (32 * 32, 32 * 32) = (1024, 1024)
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(1024, 1024);
     });
 
     it("should render hub sprite centered at (32 * 32, 32 * 32) with display size 64x64", () => {
@@ -229,27 +274,78 @@ describe("FactoryScene", () => {
   });
 
   describe("mouse wheel zoom", () => {
+    let wheelHandler: ((pointer: unknown, gameObjects: unknown, deltaX: number, deltaY: number) => void) | null = null;
+
+    beforeEach(() => {
+      // Capture the wheel handler that was registered
+      (scene.input.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "wheel" && typeof call[1] === "function") {
+          wheelHandler = call[1] as typeof wheelHandler;
+        }
+      });
+    });
+
     it("should zoom in on deltaY < 0 (wheel up)", () => {
-      // Verify the zoom calculation logic: negative deltaY should increase zoom
-      const initialZoom = 1;
-      const deltaYUp = -1;
-      const newZoomUp = initialZoom - deltaYUp * 0.1; // ZOOM_SENSITIVITY = 0.1
-      expect(newZoomUp).toBeGreaterThan(initialZoom); // Should zoom in
+      scene.create();
+      
+      // Re-capture handler after create() registers it
+      (scene.input.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "wheel" && typeof call[1] === "function") {
+          wheelHandler = call[1] as typeof wheelHandler;
+        }
+      });
+
+      expect(wheelHandler).toBeDefined();
+      
+      const initialZoom = scene.cameras.main.zoom;
+      // Call the handler with deltaY = -1 (wheel up)
+      wheelHandler!(null as unknown, null as unknown, 0, -1);
+      
+      // Zoom should increase (zoom in)
+      expect(scene.cameras.main.zoom).toBeGreaterThan(initialZoom);
     });
 
     it("should zoom out on deltaY > 0 (wheel down)", () => {
-      const initialZoom = 1;
-      const deltaYDown = 1;
-      const newZoomDown = initialZoom - deltaYDown * 0.1; // ZOOM_SENSITIVITY = 0.1
-      expect(newZoomDown).toBeLessThan(initialZoom); // Should zoom out
+      scene.create();
+      
+      // Re-capture handler after create() registers it
+      (scene.input.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "wheel" && typeof call[1] === "function") {
+          wheelHandler = call[1] as typeof wheelHandler;
+        }
+      });
+
+      expect(wheelHandler).toBeDefined();
+      
+      const initialZoom = scene.cameras.main.zoom;
+      // Call the handler with deltaY = 1 (wheel down)
+      wheelHandler!(null as unknown, null as unknown, 0, 1);
+      
+      // Zoom should decrease (zoom out)
+      expect(scene.cameras.main.zoom).toBeLessThan(initialZoom);
     });
 
-    it("should use 4th argument deltaY in wheel handler signature", () => {
-      // Verify the wheel handler signature uses (pointer, gameObjects, deltaX, deltaY)
-      // This is tested by checking that deltaY is correctly used in zoom calculation
-      const deltaY = -5; // Wheel up
-      const zoomChange = -deltaY * 0.1; // Should be positive (zoom in)
-      expect(zoomChange).toBe(0.5);
+    it("should clamp zoom to [ZOOM_MIN, ZOOM_MAX]", () => {
+      scene.create();
+      
+      // Re-capture handler after create() registers it
+      (scene.input.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "wheel" && typeof call[1] === "function") {
+          wheelHandler = call[1] as typeof wheelHandler;
+        }
+      });
+
+      expect(wheelHandler).toBeDefined();
+      
+      // Set zoom to minimum
+      scene.cameras.main.zoom = 0.5;
+      // Wheel up multiple times
+      for (let i = 0; i < 20; i++) {
+        wheelHandler!(null as unknown, null as unknown, 0, -1);
+      }
+      
+      // Should be clamped at ZOOM_MAX (2)
+      expect(scene.cameras.main.zoom).toBe(2);
     });
   });
 });
@@ -513,9 +609,92 @@ describe("FactoryScene syncWorld overlays", () => {
 });
 
 describe("PlacementGhost", () => {
-  it("should be importable from overlays module", () => {
-    // This test verifies the PlacementGhost class exists and can be imported
-    // The actual functionality is tested through FactoryScene integration
-    expect(true).toBe(true);
+  let mockScene: { add: { sprite: ReturnType<typeof vi.fn> }; textures: { createCanvas: ReturnType<typeof vi.fn> } };
+  let ghostSprite: {
+    setAlpha: ReturnType<typeof vi.fn>;
+    setDepth: ReturnType<typeof vi.fn>;
+    setPosition: ReturnType<typeof vi.fn>;
+    setVisible: ReturnType<typeof vi.fn>;
+    setTexture: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ghostSprite = {
+      setAlpha: vi.fn(),
+      setDepth: vi.fn(),
+      setPosition: vi.fn(),
+      setVisible: vi.fn(),
+      setTexture: vi.fn(),
+      destroy: vi.fn(),
+    };
+    
+    mockScene = {
+      add: {
+        sprite: vi.fn().mockReturnValue(ghostSprite),
+      },
+      textures: {
+        createCanvas: vi.fn().mockReturnValue({
+          getContext: vi.fn().mockReturnValue({
+            fillStyle: "",
+            fillRect: vi.fn(),
+            fillCircle: vi.fn(),
+          }),
+        }),
+      },
+    };
+  });
+
+  it("should create a ghost sprite with alpha 0.5 on first show", () => {
+    const ghost = new PlacementGhost(mockScene as unknown as Scene);
+    ghost.show(5, 5, "belt", "E");
+
+    // Should create sprite and set alpha to 0.5
+    expect(mockScene.add.sprite).toHaveBeenCalledWith(0, 0, expect.stringContaining("belt"));
+    expect(ghostSprite.setAlpha).toHaveBeenCalledWith(0.5);
+  });
+
+  it("should position ghost at center of tile (tileX + 0.5) * TILE_SIZE", () => {
+    const ghost = new PlacementGhost(mockScene as unknown as Scene);
+    ghost.show(5, 5, "belt", "E");
+
+    // Position should be (5 + 0.5) * 32 = 176
+    expect(ghostSprite.setPosition).toHaveBeenCalledWith(176, 176);
+  });
+
+  it("should update texture on subsequent show calls with different building/direction", () => {
+    const ghost = new PlacementGhost(mockScene as unknown as Scene);
+    ghost.show(5, 5, "belt", "E");
+    
+    // Second call should not create new sprite but update texture
+    ghost.show(5, 5, "miner", "N");
+    
+    expect(mockScene.add.sprite).toHaveBeenCalledTimes(1); // Only once
+    expect(ghostSprite.setTexture).toHaveBeenCalled(); // Texture updated
+  });
+
+  it("should hide ghost when hide() is called", () => {
+    const ghost = new PlacementGhost(mockScene as unknown as Scene);
+    ghost.show(5, 5, "belt", "E");
+    ghost.hide();
+
+    expect(ghostSprite.setVisible).toHaveBeenCalledWith(false);
+  });
+
+  it("should update position and texture on update()", () => {
+    const ghost = new PlacementGhost(mockScene as unknown as Scene);
+    ghost.update(5, 5, "belt", "E");
+
+    expect(ghostSprite.setPosition).toHaveBeenCalledWith(176, 176);
+    expect(ghostSprite.setVisible).toHaveBeenCalledWith(true);
+  });
+
+  it("should destroy sprite on destroy()", () => {
+    const ghost = new PlacementGhost(mockScene as unknown as Scene);
+    ghost.show(5, 5, "belt", "E");
+    ghost.destroy();
+
+    expect(ghostSprite.destroy).toHaveBeenCalled();
   });
 });

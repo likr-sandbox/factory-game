@@ -1,6 +1,6 @@
 // FactoryScene: Main Phaser scene for the factory game
 import { Scene, GameObjects } from "phaser";
-import type { WorldState, Direction, BuildingType } from "../sim/types";
+import type { WorldState, Direction } from "../sim/types";
 import type { InputState } from "./input";
 import { registerAllTextures } from "./textures";
 import { getTerrainTextureKey, getDepositTextureKey } from "./sprites/terrain";
@@ -26,6 +26,7 @@ const ZOOM_SENSITIVITY = 0.1;
 export class FactoryScene extends Scene {
   private cameraPanStart: { x: number; y: number } | null = null;
   private lastMousePos: { x: number; y: number } | null = null;
+  private lastHoveredTile: { x: number; y: number } | null = null;
   private world: WorldState | null = null;
   private inputState: InputState | null = null;
   // Explicit sprite tracking to prevent leaks
@@ -309,10 +310,13 @@ export class FactoryScene extends Scene {
         this.lastMousePos = { x: pointer.x, y: pointer.y };
       }
 
+      // Track hover position for ghost updates on rotation
+      const tileX = Math.floor(pointer.worldX / TILE_SIZE);
+      const tileY = Math.floor(pointer.worldY / TILE_SIZE);
+      this.lastHoveredTile = { x: tileX, y: tileY };
+
       // Update placement ghost preview when in place mode with a selected building
       if (this.inputState?.mode === "place" && this.inputState.selectedBuilding && this.placementGhost) {
-        const tileX = Math.floor(pointer.worldX / TILE_SIZE);
-        const tileY = Math.floor(pointer.worldY / TILE_SIZE);
         this.placementGhost.update(tileX, tileY, this.inputState.selectedBuilding, this.inputState.direction);
       } else if (this.placementGhost) {
         this.placementGhost.hide();
@@ -354,19 +358,18 @@ export class FactoryScene extends Scene {
    */
   private setupKeyboardControls(): void {
     const cursors = this.input.keyboard?.createCursorKeys();
-    const wKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-    const aKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    const sKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    const dKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    const wKey = this.input.keyboard?.addKey("W");
+    const aKey = this.input.keyboard?.addKey("A");
+    const sKey = this.input.keyboard?.addKey("S");
+    const dKey = this.input.keyboard?.addKey("D");
 
     if (this.input.keyboard) {
       this.input.keyboard.on("keydown-R", () => {
         if (!this.inputState) return;
         this.inputState.direction = rotateDirection(this.inputState.direction);
-        // Update placement ghost preview with new direction
-        if (this.placementGhost && this.inputState.mode === "place" && this.inputState.selectedBuilding) {
-          // Ghost will be updated on next pointermove, but we can trigger an immediate update
-          // by emitting an event or just letting pointermove handle it
+        // Update placement ghost preview immediately with new direction
+        if (this.placementGhost && this.inputState.mode === "place" && this.inputState.selectedBuilding && this.lastHoveredTile) {
+          this.placementGhost.update(this.lastHoveredTile.x, this.lastHoveredTile.y, this.inputState.selectedBuilding, this.inputState.direction);
         }
         this.events.emit("worldMutated");
       });
