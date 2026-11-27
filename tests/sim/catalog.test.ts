@@ -80,6 +80,24 @@ describe("Building Catalog", () => {
       expect(BUILDING_CATALOG[type].nameJa.length).toBeGreaterThan(0);
     }
   });
+
+  it("should have basic buildings unlocked by default", () => {
+    // Basic buildings should be unlocked by default
+    expect(BUILDING_CATALOG.hub.unlockedByDefault).toBe(true);
+    expect(BUILDING_CATALOG.miner.unlockedByDefault).toBe(true);
+    expect(BUILDING_CATALOG.belt.unlockedByDefault).toBe(true);
+    expect(BUILDING_CATALOG.splitter.unlockedByDefault).toBe(true);
+    expect(BUILDING_CATALOG.smelter.unlockedByDefault).toBe(true);
+    expect(BUILDING_CATALOG.assembler.unlockedByDefault).toBe(true);
+  });
+
+  it("should have tech-gated buildings locked by default", () => {
+    // Tech-gated buildings should NOT be unlocked by default
+    expect(BUILDING_CATALOG.underground_belt.unlockedByDefault).toBe(false);
+    expect(BUILDING_CATALOG.filter_splitter.unlockedByDefault).toBe(false);
+    expect(BUILDING_CATALOG.sensor.unlockedByDefault).toBe(false);
+    expect(BUILDING_CATALOG.recycler.unlockedByDefault).toBe(false);
+  });
 });
 
 describe("Recipe Catalog", () => {
@@ -184,11 +202,20 @@ describe("Recipe Catalog", () => {
 });
 
 describe("Tech Catalog", () => {
-  it("should have tech entries with valid structure", () => {
-    const techIds = Object.keys(TECH_CATALOG);
-    expect(techIds.length).toBeGreaterThan(0);
-    
-    for (const id of techIds) {
+  const expectedTechIds: string[] = [
+    "filter_splitter", "underground_belt", "high_efficiency",
+    "sensor", "recycler", "advanced_smelting", "electronics", "automation"
+  ];
+
+  it("should have all 8 tech entries", () => {
+    expect(Object.keys(TECH_CATALOG).length).toBe(8);
+    for (const id of expectedTechIds) {
+      expect(TECH_CATALOG[id]).toBeDefined();
+    }
+  });
+
+  it("should have valid structure for all tech entries", () => {
+    for (const id of expectedTechIds) {
       const tech = TECH_CATALOG[id];
       expect(tech).toBeDefined();
       if (tech) {
@@ -198,6 +225,32 @@ describe("Tech Catalog", () => {
         expect(Array.isArray(tech.unlocks)).toBe(true);
       }
     }
+  });
+
+  it("should have correct costs matching TECH_COSTS in progression.ts", () => {
+    expect(TECH_CATALOG["filter_splitter"]!.cost).toBe(100);
+    expect(TECH_CATALOG["underground_belt"]!.cost).toBe(150);
+    expect(TECH_CATALOG["high_efficiency"]!.cost).toBe(200);
+    expect(TECH_CATALOG["sensor"]!.cost).toBe(150);
+    expect(TECH_CATALOG["recycler"]!.cost).toBe(200);
+    expect(TECH_CATALOG["advanced_smelting"]!.cost).toBe(200);
+    expect(TECH_CATALOG["electronics"]!.cost).toBe(300);
+    expect(TECH_CATALOG["automation"]!.cost).toBe(500);
+  });
+
+  it("should have correct unlocks for each tech", () => {
+    expect(TECH_CATALOG["filter_splitter"]!.unlocks).toContain("filter_splitter");
+    expect(TECH_CATALOG["underground_belt"]!.unlocks).toContain("underground_belt");
+    expect(TECH_CATALOG["high_efficiency"]!.unlocks).toContain("iron_plate_high");
+    expect(TECH_CATALOG["high_efficiency"]!.unlocks).toContain("copper_plate_high");
+    expect(TECH_CATALOG["sensor"]!.unlocks).toContain("sensor");
+    expect(TECH_CATALOG["recycler"]!.unlocks).toContain("recycler");
+    expect(TECH_CATALOG["advanced_smelting"]!.unlocks).toContain("steel_plate");
+    expect(TECH_CATALOG["advanced_smelting"]!.unlocks).toContain("silicon_wafer");
+    expect(TECH_CATALOG["electronics"]!.unlocks).toContain("assembler");
+    expect(TECH_CATALOG["electronics"]!.unlocks).toContain("circuit_board");
+    expect(TECH_CATALOG["electronics"]!.unlocks).toContain("microchip");
+    expect(TECH_CATALOG["automation"]!.unlocks).toContain("automation_module");
   });
 });
 

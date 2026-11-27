@@ -28,13 +28,8 @@ export function calculateTotalResearchPoints(history: Array<{ material: Material
 
 function getTechUnlocks(techId: TechId): string[] {
   const cat = TECH_CATALOG[techId];
-  if (cat) return cat.unlocks;
-  switch (techId) {
-    case "high_efficiency": return ["iron_plate_high", "copper_plate_high"];
-    case "sensor": return ["sensor"];
-    case "recycler": return ["recycler"];
-    default: return [];
-  }
+  if (!cat) throw new Error(`Unknown tech ID: ${techId}`);
+  return cat.unlocks;
 }
 
 export function unlockTech(world: WorldState, techId: TechId): boolean {
@@ -57,6 +52,8 @@ export function isBuildingUnlocked(world: WorldState, bt: BuildingType): boolean
 export function isRecipeUnlocked(world: WorldState, rid: RecipeId): boolean {
   const r = RECIPE_CATALOG[rid];
   if (!r) throw new Error(`Unknown recipe ID: ${rid}`);
+  // Fail-fast: never report a recipe unlocked if its building is locked
+  if (!isBuildingUnlocked(world, r.building)) return false;
   if (r.unlockedByDefault) return true;
   return (world.unlockedTechs || []).some(t => getTechUnlocks(t as TechId).includes(rid));
 }
@@ -132,8 +129,7 @@ export function getCurrentTutorialStep(world: WorldState): TutorialStep | null {
   if (phase === 0 || phase > 4) return null;
   const done = new Set(world.completedTutorialSteps || []);
   for (const step of getTutorialStepsForPhase(phase)) {
-    if (done.has(step.id)) continue;
-    if (step.check(world)) return step;
+    if (!done.has(step.id)) return step;
   }
   return null;
 }
