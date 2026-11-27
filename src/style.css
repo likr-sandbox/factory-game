@@ -116,10 +116,7 @@ html, body {
 
 .direction-indicator {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  text-align: center;
-  line-height: 12px;
+  white-space: nowrap;
 }
 
 .palette-feedback {
