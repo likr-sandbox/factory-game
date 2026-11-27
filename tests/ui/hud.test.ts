@@ -17,8 +17,8 @@ class MockElement {
   appendChild(child: MockElement): void { child.parentNode = this; this.children.push(child); }
   removeChild(child: MockElement): void { const idx = this.children.indexOf(child); if (idx !== -1) { this.children.splice(idx, 1); child.parentNode = null; } }
   querySelectorAll(sel: string): MockElement[] { 
-    if (sel === ".speed-btn") return this.children.filter(c => c.className === "speed-btn");
-    if (sel === ".tech-btn") return this.children.filter(c => c.className === "tech-btn");
+    if (sel === ".speed-btn") return this.children.filter(c => c.className.includes("speed-btn"));
+    if (sel === ".tech-btn") return this.children.filter(c => c.className.includes("tech-btn"));
     return [];
   }
   classList = { add: (cls: string) => { if (!this.className.includes(cls)) this.className += ` ${cls}`; }, remove: (cls: string) => { this.className = this.className.replace(cls, "").trim(); } };
@@ -234,6 +234,90 @@ describe("mountHud", () => {
     const randomBtn = seedResetEl.children[2]!;
     randomBtn.dispatchEvent("click");
     expect(onResetWorld).toHaveBeenCalled();
+    handle.destroy();
+  });
+
+  it("should initialize 1x speed button with active class on mount", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const speedControlsEl = container.children[0]!.children[2]!;
+    const buttons = speedControlsEl.querySelectorAll(".speed-btn");
+    // buttons[0]=pause, buttons[1]=1x, buttons[2]=2x, buttons[3]=4x
+    expect(buttons[1]!.className).toContain("active");
+    expect(buttons[0]!.className).not.toContain("active");
+    expect(buttons[2]!.className).not.toContain("active");
+    expect(buttons[3]!.className).not.toContain("active");
+    handle.destroy();
+  });
+
+  it("should apply wrap-friendly flex styling to hudEl and techTreeEl", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const hudEl = container.children[0]!;
+    expect(hudEl.style.cssText).toContain("flex-wrap:wrap");
+    expect(hudEl.style.cssText).toContain("align-items:center");
+    expect(hudEl.style.cssText).toContain("gap:6px");
+    expect(hudEl.style.cssText).toContain("width:100%");
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    expect(techTreeEl.style.cssText).toContain("flex-wrap:wrap");
+    expect(techTreeEl.style.cssText).toContain("align-items:center");
+    expect(techTreeEl.style.cssText).toContain("gap:4px");
+    handle.destroy();
+  });
+
+  it("should keep all HUD controls clickable at various screen sizes", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const hudEl = container.children[0]!;
+    
+    // Verify all expected children exist (indices 0..9)
+    expect(hudEl.children).toHaveLength(10);
+    
+    // Check speed controls are present and clickable
+    const speedControlsEl = hudEl.children[2]!;
+    const speedButtons = speedControlsEl.querySelectorAll(".speed-btn");
+    expect(speedButtons.length).toBe(4);
+    
+    // Check tech tree container exists
+    const techTreeEl = hudEl.children[7]!;
+    expect(techTreeEl).toBeDefined();
+    
+    // Check seed reset controls exist
+    const seedResetEl = hudEl.children[9]!;
+    expect(seedResetEl.children.length).toBeGreaterThanOrEqual(3);
+    
+    handle.destroy();
+  });
+
+  it("should display tech buttons that are clickable when unlocked", () => {
+    const onUnlockTech = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onUnlockTech });
+    const world = makeWorld();
+    world.unlockedTechs = [];
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    expect(buttons.length).toBeGreaterThan(0);
+    
+    // Click first tech button
+    buttons[0]!.dispatchEvent("click");
+    expect(onUnlockTech).toHaveBeenCalled();
+    
+    handle.destroy();
+  });
+
+  it("should display seed controls that are clickable", () => {
+    const onResetWorld = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onResetWorld });
+    const world = makeWorld();
+    handle.update(world);
+    
+    const seedResetEl = container.children[0]!.children[9]!;
+    const randomBtn = seedResetEl.children[2]!;
+    
+    // Click random button
+    randomBtn.dispatchEvent("click");
+    expect(onResetWorld).toHaveBeenCalled();
+    
     handle.destroy();
   });
 });
