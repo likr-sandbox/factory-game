@@ -112,9 +112,9 @@ describe("registerFactoryWebMcpTools", () => {
     const handle = registerFactoryWebMcpTools({ getWorld, env });
     
     expect(handle.detected).toBe(true);
-    expect(handle.registeredTools).toHaveLength(10);
+    expect(handle.registeredTools).toHaveLength(11);
     expect(handle.registeredTools).toEqual(ALL_TOOL_NAMES);
-    expect(mockContext.registerTool).toHaveBeenCalledTimes(10);
+    expect(mockContext.registerTool).toHaveBeenCalledTimes(11);
   });
 
   it("should be a safe no-op when detection.context is absent", () => {
@@ -164,5 +164,57 @@ describe("registerFactoryWebMcpTools", () => {
     const logs = handle.getLogs();
     expect(logs.length).toBe(1);
     expect(logs[0]?.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("should register unlock_tech tool", () => {
+    const mockContext = { registerTool: vi.fn() };
+    const env = { document: { modelContext: mockContext } };
+    const handle = registerFactoryWebMcpTools({ getWorld, env });
+    
+    expect(handle.registeredTools).toContain("unlock_tech");
+    expect(mockContext.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "unlock_tech",
+        description: expect.any(String),
+        inputSchema: expect.any(Object),
+      })
+    );
+  });
+
+  it("should invoke unlock_tech and log successful tech unlock", async () => {
+    const handle = registerFactoryWebMcpTools({ getWorld });
+    const listener = vi.fn();
+    handle.subscribe(listener);
+    
+    // Unlock underground_belt tech (should succeed if research points available)
+    const result = await handle.invokeTool("unlock_tech", { techId: "underground_belt" });
+    
+    expect(result).toBeDefined();
+    expect(typeof result === "object" && result !== null && "success" in result).toBe(true);
+    
+    const logs = handle.getLogs();
+    const unlockLog = logs.find((l) => l.toolName === "unlock_tech");
+    expect(unlockLog).toBeDefined();
+    expect(unlockLog?.input).toEqual({ techId: "underground_belt" });
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it("should log failed unlock_tech calls with invalid tech ID", async () => {
+    const handle = registerFactoryWebMcpTools({ getWorld });
+    
+    const result = await handle.invokeTool("unlock_tech", { techId: "invalid_tech" });
+    
+    expect(result).toEqual({ 
+      success: false, 
+      error: expect.objectContaining({ 
+        code: "INVALID_TECH",
+        message: expect.stringContaining("Unknown tech ID")
+      }) 
+    });
+    
+    const logs = handle.getLogs();
+    const failedLog = logs.find((l) => l.toolName === "unlock_tech");
+    expect(failedLog).toBeDefined();
+    expect(failedLog?.success).toBe(false);
   });
 });
