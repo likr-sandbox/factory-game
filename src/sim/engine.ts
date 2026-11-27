@@ -5,6 +5,9 @@ import type { WorldState, BuildingState, Tile, Direction, MaterialId, RecipeId }
 import { RECIPE_CATALOG } from "./catalog";
 import { directionDelta, oppositeDirection, inBounds, nextRandom } from "./world";
 import { processFilterSplitters, processRecyclers, processUndergroundBelts, updateReliabilityAndOverload } from "./reliability";
+import { awardResearchPoints, getCurrentTutorialStep, completeTutorialStep } from "./progression";
+import { updateQuestProgress, processQuests } from "./quests";
+import { updateSpmStats } from "./stats";
 
 const MINING_INTERVAL = 60; // ticks between mining operations
 const MAX_OUTPUT_BUFFER = 10; // max items in output buffer
@@ -248,6 +251,12 @@ function processHubs(world: WorldState): void {
         amount: actualAmount,
       });
 
+      // Award research points for delivered materials
+      awardResearchPoints(world, matKey, actualAmount);
+
+      // Update quest progress for delivered materials
+      updateQuestProgress(world, matKey, actualAmount);
+
       // Clear the input buffer
       building.inputBuffer[matKey] = 0;
 
@@ -470,6 +479,20 @@ export function stepTick(world: WorldState): void {
 
   // 10. Update reliability and overload
   updateReliabilityAndOverload(world);
+
+  // 11. Process quests (check for completion/expiry and generate new ones)
+  processQuests(world);
+
+  // 12. Update SPM stats
+  updateSpmStats(world);
+
+  // 13. Auto-advance completed tutorial steps when tutorialPhase > 0
+  if ((world.tutorialPhase ?? 0) > 0) {
+    const currentStep = getCurrentTutorialStep(world);
+    if (currentStep) {
+      completeTutorialStep(world, currentStep.id);
+    }
+  }
 }
 
 /**
