@@ -184,8 +184,12 @@ describe("FactoryScene", () => {
         },
       });
 
+      // Explicitly set add to undefined to test the guard branch
+      (scene as unknown as { add: unknown }).add = undefined;
+      
       // Should not throw - early return when this.add is undefined
       expect(() => scene.syncWorld(world)).not.toThrow();
+      expect(scene["buildingSprites"].size).toBe(0);
     });
 
     it("should handle empty world without errors", () => {
@@ -285,7 +289,7 @@ describe("FactoryScene", () => {
       });
     });
 
-    it("should zoom in on deltaY < 0 (wheel up)", () => {
+    it("should zoom in by 0.1 on wheel up (deltaY = -100)", () => {
       scene.create();
       
       // Re-capture handler after create() registers it
@@ -298,14 +302,15 @@ describe("FactoryScene", () => {
       expect(wheelHandler).toBeDefined();
       
       const initialZoom = scene.cameras.main.zoom;
-      // Call the handler with deltaY = -1 (wheel up)
-      wheelHandler!(null as unknown, null as unknown, 0, -1);
+      // Call the handler with deltaY = -100 (realistic wheel up event)
+      wheelHandler!(null as unknown, null as unknown, 0, -100);
       
-      // Zoom should increase (zoom in)
-      expect(scene.cameras.main.zoom).toBeGreaterThan(initialZoom);
+      // Zoom should increase by exactly ZOOM_SENSITIVITY (0.1)
+      expect(scene.cameras.main.zoom).toBe(initialZoom + 0.1);
+      expect(scene.cameras.main.zoom).toBe(1.1);
     });
 
-    it("should zoom out on deltaY > 0 (wheel down)", () => {
+    it("should zoom out by 0.1 on wheel down (deltaY = 100)", () => {
       scene.create();
       
       // Re-capture handler after create() registers it
@@ -318,11 +323,12 @@ describe("FactoryScene", () => {
       expect(wheelHandler).toBeDefined();
       
       const initialZoom = scene.cameras.main.zoom;
-      // Call the handler with deltaY = 1 (wheel down)
-      wheelHandler!(null as unknown, null as unknown, 0, 1);
+      // Call the handler with deltaY = 100 (realistic wheel down event)
+      wheelHandler!(null as unknown, null as unknown, 0, 100);
       
-      // Zoom should decrease (zoom out)
-      expect(scene.cameras.main.zoom).toBeLessThan(initialZoom);
+      // Zoom should decrease by exactly ZOOM_SENSITIVITY (0.1)
+      expect(scene.cameras.main.zoom).toBe(initialZoom - 0.1);
+      expect(scene.cameras.main.zoom).toBe(0.9);
     });
 
     it("should clamp zoom to [ZOOM_MIN, ZOOM_MAX]", () => {
@@ -339,9 +345,9 @@ describe("FactoryScene", () => {
       
       // Set zoom to minimum
       scene.cameras.main.zoom = 0.5;
-      // Wheel up multiple times
+      // Wheel up multiple times with realistic deltaY
       for (let i = 0; i < 20; i++) {
-        wheelHandler!(null as unknown, null as unknown, 0, -1);
+        wheelHandler!(null as unknown, null as unknown, 0, -100);
       }
       
       // Should be clamped at ZOOM_MAX (2)
