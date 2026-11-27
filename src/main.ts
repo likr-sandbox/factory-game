@@ -2,6 +2,7 @@
 import "./style.css";
 import * as Phaser from "phaser";
 import { createWorld } from "./sim/world";
+import { unlockTechAction } from "./sim/actions";
 import type { WorldState } from "./sim/types";
 import { stepTick } from "./sim/engine";
 import { createPhaserConfig } from "./game/config";
@@ -145,6 +146,23 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   hud = mountHud(hudContainer, {
     onSpeedChange: (speed) => setSimulationSpeed(speed),
     onPausedToggle: (paused) => setSimulationSpeed(paused ? 0 : 1),
+    onUnlockTech: (techId) => {
+      const result = unlockTechAction(activeWorld, techId as "underground_belt" | "filter_splitter" | "high_efficiency" | "sensor" | "recycler" | "advanced_smelting" | "electronics" | "automation");
+      if (result.success) {
+        scene?.syncWorld(activeWorld);
+        hud?.update(activeWorld);
+        paletteBar?.sync(activeWorld, inputState);
+        inspector?.update(activeWorld, inputState.inspectedCoord);
+      }
+    },
+    onResetWorld: (seed) => {
+      const newWorld = createWorld(seed);
+      resetSimulationState(newWorld);
+      scene?.syncWorld(activeWorld);
+      hud?.update(activeWorld);
+      paletteBar?.sync(activeWorld, inputState);
+      inspector?.update(activeWorld, inputState.inspectedCoord);
+    },
   });
 
   // Mount palette bar into dedicated container (not paletteContainer directly)
