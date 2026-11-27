@@ -3,7 +3,7 @@
 
 import type { WorldState, ActionResult } from "../sim/types";
 import type { MutateToolName } from "./types";
-import { placeBuilding, placeBeltLine, removeArea, setRecipe, batchActions } from "../sim/actions";
+import { placeBuilding, placeBeltLine, removeArea, setRecipe, batchActions, unlockTechAction } from "../sim/actions";
 
 /**
  * Create build tool handlers for WebMCP mutate tools.
@@ -96,6 +96,30 @@ export function createBuildToolHandlers(
     return result;
   };
 
+  const handleUnlockTech = (input: Record<string, unknown>): ActionResult => {
+    const techId = input.techId as string | undefined;
+
+    if (typeof techId !== "string") {
+      return { success: false, error: { code: "INVALID_INPUT", message: "techId must be a string" } };
+    }
+
+    const validTechIds: string[] = [
+      "underground_belt", "filter_splitter", "high_efficiency",
+      "sensor", "recycler", "advanced_smelting", "electronics", "automation"
+    ];
+
+    if (!validTechIds.includes(techId)) {
+      return { success: false, error: { code: "INVALID_TECH", message: `Unknown tech ID: ${techId}`, details: { techId } } };
+    }
+
+    const result = unlockTechAction(getWorld(), techId as any);
+    
+    if (result.success && onWorldMutated) {
+      onWorldMutated();
+    }
+    return result;
+  };
+
   const handleBatchActions = (input: Record<string, unknown>): ActionResult => {
     const actions = input.actions;
     const atomic = input.atomic as boolean | undefined;
@@ -133,5 +157,6 @@ export function createBuildToolHandlers(
     remove_area: handleRemoveArea,
     set_recipe: handleSetRecipe,
     batch_actions: handleBatchActions,
+    unlock_tech: handleUnlockTech,
   };
 }
