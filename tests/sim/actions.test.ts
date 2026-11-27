@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createWorld } from "../../src/sim/world";
-import { placeBuilding, placeBeltLine, removeArea, setRecipe, batchActions } from "../../src/sim/actions";
+import { placeBuilding, placeBeltLine, removeArea, setRecipe, batchActions, unlockTechAction } from "../../src/sim/actions";
+import { isBuildingUnlocked, isRecipeUnlocked, unlockTech } from "../../src/sim/progression";
 import type { WorldState, Direction, BatchActionItem, ActionResult, ActionResultSuccess, ActionResultFailure } from "../../src/sim/types";
 
 interface RemoveAreaChanges { removedCount: number; }
@@ -60,6 +61,45 @@ describe("placeBuilding", () => {
     const r = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_gear" });
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("INVALID_RECIPE");
   });
+
+  it("should fail when placing locked building type (filter_splitter, assembler)", () => {
+    // filter_splitter requires electronics or filter_splitter tech
+    let r = placeBuilding(world, { x: 10, y: 10, type: "filter_splitter", direction: "N" });
+    expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
+    
+    // assembler requires electronics tech
+    r = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
+    expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
+  });
+
+  it("should succeed when placing locked building after unlocking tech", () => {
+    // Unlock electronics tech first
+    world.researchPoints = 300;
+    const unlockResult = unlockTech(world, "electronics");
+    expect(unlockResult).toBe(true);
+    
+    // Now should be able to place assembler
+    const r = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
+    expect(r.success).toBe(true);
+  });
+
+  it("should fail when placing smelter with locked recipe", () => {
+    // steel_plate requires advanced_smelting tech
+    let r = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "steel_plate" });
+    expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
+  });
+
+  it("should succeed when placing smelter with unlocked recipe after tech unlock", () => {
+    // Unlock advanced_smelting tech
+    world.researchPoints = 200;
+    const unlockResult = unlockTech(world, "advanced_smelting");
+    expect(unlockResult).toBe(true);
+    
+    // Now should be able to place smelter with steel_plate recipe
+    const r = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "steel_plate" });
+    expect(r.success).toBe(true);
+    expect(world.buildings[getSuccessResult(r).buildingId!]!.recipeId).toBe("steel_plate");
+  });
 });
 
 describe("placeBeltLine", () => {
@@ -102,7 +142,7 @@ describe("removeArea", () => {
 
   it("should remove buildings in the specified area", () => {
     placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_plate" });
-    placeBuilding(world, { x: 11, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
+    placeBuilding(world, { x: 11, y: 10, type: "splitter", direction: "N" });
     placeBuilding(world, { x: 12, y: 10, type: "belt", direction: "E" });
     const r = removeArea(world, { x: 10, y: 10, width: 3, height: 1 });
     expect(r.success).toBe(true);
@@ -126,6 +166,9 @@ describe("setRecipe", () => {
     const s1 = getSuccessResult(p1);
     let r = setRecipe(world, { x: 10, y: 10, recipeId: "copper_plate" });
     expect(r.success).toBe(true); expect(world.buildings[s1.buildingId!]!.recipeId).toBe("copper_plate");
+    // Unlock filter_splitter tech first
+    world.researchPoints = 100;
+    unlockTech(world, "filter_splitter");
     const p2 = placeBuilding(world, { x: 20, y: 10, type: "filter_splitter", direction: "N" });
     const s2 = getSuccessResult(p2);
     r = setRecipe(world, { x: 20, y: 10, filterMaterial: "iron_plate" });
@@ -148,6 +191,32 @@ describe("setRecipe", () => {
     r = setRecipe(world, { x: 50, y: 50, recipeId: "iron_plate" });
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("NO_BUILDING");
   });
+
+  it("should fail when setting locked recipe (steel_plate without advanced_smelting)", () => {
+    const p = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_plate" });
+    expect(p.success).toBe(true);
+    const s = getSuccessResult(p);
+    
+    // steel_plate requires advanced_smelting tech
+    let r = setRecipe(world, { x: 10, y: 10, recipeId: "steel_plate" });
+    expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
+  });
+
+  it("should succeed when setting unlocked recipe after tech unlock", () => {
+    // Unlock advanced_smelting first
+    world.researchPoints = 200;
+    const unlockResult = unlockTech(world, "advanced_smelting");
+    expect(unlockResult).toBe(true);
+    
+    const p = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_plate" });
+    expect(p.success).toBe(true);
+    const s = getSuccessResult(p);
+    
+    // Now should be able to set steel_plate
+    let r = setRecipe(world, { x: 10, y: 10, recipeId: "steel_plate" });
+    expect(r.success).toBe(true);
+    expect(world.buildings[s.buildingId!]!.recipeId).toBe("steel_plate");
+  });
 });
 
 describe("batchActions", () => {
@@ -157,7 +226,7 @@ describe("batchActions", () => {
   it("should execute multiple actions sequentially", () => {
     const actions: BatchActionItem[] = [
       { kind: "place_building", input: { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_plate" } },
-      { kind: "place_building", input: { x: 11, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" } },
+      { kind: "place_building", input: { x: 11, y: 10, type: "splitter", direction: "N" } },
     ];
     const r = batchActions(world, { actions, atomic: true });
     expect(r.success).toBe(true); expect(Object.keys(world.buildings).length).toBe(3);
@@ -211,5 +280,53 @@ describe("batchActions", () => {
     
     // Recipe should be rolled back to iron_plate
     expect(world.buildings[successP.buildingId!]!.recipeId).toBe("iron_plate");
+  });
+});
+
+describe("unlockTechAction", () => {
+  let world: WorldState;
+  beforeEach(() => { world = createWorld(42); });
+
+  it("should successfully unlock a tech with sufficient points", () => {
+    world.researchPoints = 300;
+    const result = unlockTechAction(world, "electronics");
+    expect(result.success).toBe(true);
+    const success = getSuccessResult(result);
+    expect(success.changes).toEqual({ unlockedTech: "electronics" });
+    expect(world.unlockedTechs).toContain("electronics");
+    expect(world.researchPoints).toBe(0); // 300 - 300 cost
+  });
+
+  it("should fail with INSUFFICIENT_POINTS when not enough research points", () => {
+    world.researchPoints = 100;
+    const result = unlockTechAction(world, "electronics"); // costs 300
+    expect(result.success).toBe(false);
+    expect(getFailureResult(result).error.code).toBe("INSUFFICIENT_POINTS");
+  });
+
+  it("should allow placing building after unlocking via unlockTechAction", () => {
+    world.researchPoints = 300;
+    
+    // Unlock electronics via action
+    const unlockResult = unlockTechAction(world, "electronics");
+    expect(unlockResult.success).toBe(true);
+    
+    // Now should be able to place assembler
+    const placeResult = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
+    expect(placeResult.success).toBe(true);
+  });
+
+  it("should deduct correct cost for different techs", () => {
+    // underground_belt costs 150
+    world.researchPoints = 200;
+    let result = unlockTechAction(world, "underground_belt");
+    expect(result.success).toBe(true);
+    expect(world.researchPoints).toBe(50);
+    
+    // filter_splitter costs 100
+    world.researchPoints = 150;
+    result = unlockTechAction(world, "filter_splitter");
+    expect(result.success).toBe(true);
+    expect(world.researchPoints).toBe(50);
   });
 });
