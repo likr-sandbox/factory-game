@@ -92,7 +92,7 @@ describe("Tech Tree Unlocks", () => {
   it("should check building unlock status", () => {
     const w = createWorld();
     expect(isBuildingUnlocked(w, "belt")).toBe(true);
-    expect(isBuildingUnlocked(w, "assembler")).toBe(false);
+    expect(isBuildingUnlocked(w, "assembler")).toBe(true); // assembler is now unlocked by default
     w.researchPoints = 300;
     unlockTech(w, "electronics");
     expect(isBuildingUnlocked(w, "assembler")).toBe(true);
@@ -121,14 +121,55 @@ describe("Tech Tree Unlocks", () => {
   it("should get tech tree status", () => {
     const w = createWorld();
     let s = getTechTreeStatus(w);
-    expect(s.sensor).toBe(true);
-    expect(s.recycler).toBe(true);
-    expect(s.electronics.assembler).toBe(false);
+    expect(s.sensor).toBe(false);
+    expect(s.recycler).toBe(false);
+    expect(s.electronics.assembler).toBe(true);
     w.researchPoints = 1000;
     unlockTech(w, "electronics");
     s = getTechTreeStatus(w);
     expect(s.electronics.assembler).toBe(true);
     expect(s.electronics.microchip).toBe(true);
+  });
+
+  it("should fail-fast: recipe not unlocked if building is locked", () => {
+    const w = createWorld();
+    // sensor and recycler buildings are locked by default
+    // so their recipes should also be locked even if we check them directly
+    expect(isBuildingUnlocked(w, "sensor")).toBe(false);
+    expect(isBuildingUnlocked(w, "recycler")).toBe(false);
+    expect(isBuildingUnlocked(w, "underground_belt")).toBe(false);
+    expect(isBuildingUnlocked(w, "filter_splitter")).toBe(false);
+    // assembler IS unlocked by default
+    expect(isBuildingUnlocked(w, "assembler")).toBe(true);
+  });
+
+  it("should unlock assembler and its recipes with electronics tech", () => {
+    const w = createWorld();
+    // assembler is already unlocked by default
+    expect(isBuildingUnlocked(w, "assembler")).toBe(true);
+    // But circuit_board and microchip recipes need electronics tech
+    expect(isRecipeUnlocked(w, "circuit_board")).toBe(false);
+    expect(isRecipeUnlocked(w, "microchip")).toBe(false);
+    w.researchPoints = 300;
+    unlockTech(w, "electronics");
+    expect(isRecipeUnlocked(w, "circuit_board")).toBe(true);
+    expect(isRecipeUnlocked(w, "microchip")).toBe(true);
+  });
+
+  it("should have basic recipes unlocked by default", () => {
+    const w = createWorld();
+    expect(isRecipeUnlocked(w, "iron_plate")).toBe(true);
+    expect(isRecipeUnlocked(w, "copper_plate")).toBe(true);
+    expect(isRecipeUnlocked(w, "iron_gear")).toBe(true);
+    expect(isRecipeUnlocked(w, "copper_wire")).toBe(true);
+  });
+
+  it("should lock high-efficiency and advanced recipes by default", () => {
+    const w = createWorld();
+    expect(isRecipeUnlocked(w, "iron_plate_high")).toBe(false);
+    expect(isRecipeUnlocked(w, "copper_plate_high")).toBe(false);
+    expect(isRecipeUnlocked(w, "steel_plate")).toBe(false);
+    expect(isRecipeUnlocked(w, "silicon_wafer")).toBe(false);
   });
 });
 
@@ -189,7 +230,7 @@ describe("Tutorial Phases", () => {
     expect(p.totalStepsInPhase).toBeGreaterThan(0);
   });
 
-  it("should show null when phase complete", () => {
+  it("should show null only when all steps in final phase are completed", () => {
     const w = createWorld(); startTutorial(w);
     w.buildings = { ...minerBs, ...smelterBs };
     w.delivered = { iron_plate: 10, copper_plate: 10 };
@@ -197,7 +238,10 @@ describe("Tutorial Phases", () => {
     completeTutorialStep(w, "p1_manual_smelting");
     completeTutorialStep(w, "p1_first_delivery");
     completeTutorialStep(w, "p1_copper_delivery");
-    expect(getCurrentTutorialStep(w)).toBeNull();
+    // After completing all phase 1 steps, tutorial advances to phase 2
+    // getCurrentTutorialStep returns first incomplete step of phase 2
+    expect(w.tutorialPhase).toBe(2);
+    expect(getCurrentTutorialStep(w)?.id).toBe("p2_batch_building");
   });
 
   it("should handle phase 2", () => {
@@ -232,5 +276,39 @@ describe("Tutorial Phases", () => {
     completeTutorialStep(w, "p4_sensor_deploy");
     expect(getCurrentTutorialStep(w)?.id).toBe("p4_master_delivery");
     expect(completeTutorialStep(w, "p4_master_delivery")).toBe(true);
+  });
+
+  it("should return first incomplete step in phase 1 without checking conditions", () => {
+    // After starting tutorial, current step should be p1_manual_mining (first non-completed)
+    const w = createWorld(); startTutorial(w);
+    expect(getCurrentTutorialStep(w)?.id).toBe("p1_manual_mining");
+    // Even without miner building, it returns the first incomplete step
+  });
+
+  it("should skip completed steps and return next incomplete step", () => {
+    const w = createWorld(); startTutorial(w);
+    // Mark first step as completed
+    w.completedTutorialSteps = ["p1_manual_mining"];
+    // Should return second step regardless of check condition
+    expect(getCurrentTutorialStep(w)?.id).toBe("p1_manual_smelting");
+  });
+
+  it("should return null when all steps in phase are completed", () => {
+    const w = createWorld(); startTutorial(w);
+    // Complete all phase 1 steps
+    w.completedTutorialSteps = ["p1_manual_mining", "p1_manual_smelting", "p1_first_delivery", "p1_copper_delivery"];
+    expect(getCurrentTutorialStep(w)).toBeNull();
+  });
+
+  it("should return null for phase 0", () => {
+    const w = createWorld();
+    // tutorialPhase is 0 by default
+    expect(getCurrentTutorialStep(w)).toBeNull();
+  });
+
+  it("should return null for phase > 4", () => {
+    const w = createWorld();
+    w.tutorialPhase = 5 as never;
+    expect(getCurrentTutorialStep(w)).toBeNull();
   });
 });
