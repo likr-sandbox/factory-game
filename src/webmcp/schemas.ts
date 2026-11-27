@@ -18,6 +18,7 @@ export const MUTATE_TOOL_NAMES: readonly MutateToolName[] = [
   "remove_area",
   "set_recipe",
   "batch_actions",
+  "unlock_tech",
 ] as const;
 
 export const ALL_TOOL_NAMES: readonly WebMcpToolName[] = [
@@ -196,6 +197,23 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
         atomic: { type: "boolean", description: "Execute all actions atomically" },
       },
       required: ["actions"],
+      additionalProperties: false,
+    },
+  },
+  unlock_tech: {
+    name: "unlock_tech",
+    description:
+      "Unlock a technology using available research points. Returns success if unlocked, or error if insufficient points or invalid tech ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        techId: {
+          type: "string",
+          enum: ["underground_belt", "filter_splitter", "high_efficiency", "sensor", "recycler", "advanced_smelting", "electronics", "automation"],
+          description: "The technology ID to unlock",
+        },
+      },
+      required: ["techId"],
       additionalProperties: false,
     },
   },

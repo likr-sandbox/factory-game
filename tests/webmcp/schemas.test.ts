@@ -8,8 +8,8 @@ import {
 } from "../../src/webmcp/schemas";
 
 describe("WebMCP Tool Names", () => {
-  it("should have exactly 10 tools in ALL_TOOL_NAMES", () => {
-    expect(ALL_TOOL_NAMES).toHaveLength(10);
+  it("should have exactly 11 tools in ALL_TOOL_NAMES", () => {
+    expect(ALL_TOOL_NAMES).toHaveLength(11);
   });
 
   it("should have exactly 5 read tools", () => {
@@ -25,8 +25,8 @@ describe("WebMCP Tool Names", () => {
     );
   });
 
-  it("should have exactly 5 mutate tools", () => {
-    expect(MUTATE_TOOL_NAMES).toHaveLength(5);
+  it("should have exactly 6 mutate tools", () => {
+    expect(MUTATE_TOOL_NAMES).toHaveLength(6);
     expect(MUTATE_TOOL_NAMES).toEqual(
       expect.arrayContaining([
         "place_building",
@@ -34,13 +34,14 @@ describe("WebMCP Tool Names", () => {
         "remove_area",
         "set_recipe",
         "batch_actions",
+        "unlock_tech",
       ])
     );
   });
 
   it("should not have duplicate tool names", () => {
     const uniqueNames = new Set(ALL_TOOL_NAMES);
-    expect(uniqueNames.size).toBe(10);
+    expect(uniqueNames.size).toBe(11);
   });
 });
 
@@ -164,6 +165,29 @@ describe("Mutate Tool Schemas", () => {
     const props = schema.inputSchema as Record<string, unknown>;
     expect(props.required).toEqual(["actions"]);
     expect((props.properties as Record<string, unknown>)?.atomic).toBeDefined();
+  });
+
+  it("unlock_tech should require techId", () => {
+    const schema = TOOL_SCHEMAS.unlock_tech;
+    const props = schema.inputSchema as Record<string, unknown>;
+    expect(props.required).toEqual(["techId"]);
+  });
+
+  it("unlock_tech techId should have all 8 valid TechId enum values", () => {
+    const schema = TOOL_SCHEMAS.unlock_tech;
+    const props = schema.inputSchema as Record<string, unknown>;
+    const techIdEnum = ((props.properties as Record<string, unknown>)?.techId as Record<string, unknown>)
+      .enum as string[];
+    expect(techIdEnum).toEqual([
+      "underground_belt",
+      "filter_splitter",
+      "high_efficiency",
+      "sensor",
+      "recycler",
+      "advanced_smelting",
+      "electronics",
+      "automation",
+    ]);
   });
 });
 
