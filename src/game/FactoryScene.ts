@@ -14,6 +14,7 @@ import {
   createInputState,
 } from "./input";
 import { UI_PALETTE } from "./palette";
+import { PlacementGhost } from "./overlays";
 
 export const TILE_SIZE = 32;
 
@@ -25,6 +26,7 @@ const ZOOM_SENSITIVITY = 0.1;
 export class FactoryScene extends Scene {
   private cameraPanStart: { x: number; y: number } | null = null;
   private lastMousePos: { x: number; y: number } | null = null;
+  private lastHoveredTile: { x: number; y: number } | null = null;
   private world: WorldState | null = null;
   private inputState: InputState | null = null;
   // Explicit sprite tracking to prevent leaks
@@ -33,6 +35,8 @@ export class FactoryScene extends Scene {
   // Status overlay tracking for faulted buildings and depleted deposits
   private faultOverlays: Map<string, GameObjects.Graphics> = new Map();
   private depletedOverlays: Map<string, GameObjects.Graphics> = new Map();
+  // Placement ghost preview
+  private placementGhost: PlacementGhost | null = null;
 
   constructor() {
     super("FactoryScene");
@@ -65,6 +69,14 @@ export class FactoryScene extends Scene {
 
     // Setup keyboard shortcuts
     this.setupKeyboardControls();
+
+    // Initialize placement ghost
+    this.placementGhost = new PlacementGhost(this);
+
+    // Sync the initial world state now that Phaser is ready
+    if (this.world) {
+      this.syncWorld(this.world);
+    }
   }
 
   /**
@@ -114,6 +126,12 @@ export class FactoryScene extends Scene {
    * Uses explicit sprite tracking to prevent leaks
    */
   syncWorld(world: WorldState): void {
+    // Guard: if Phaser has not yet booted create(), this.add will be undefined
+    // Return early to prevent TypeError - pre-create() calls are safely skipped
+    if (!this.add) {
+      return;
+    }
+
     // Destroy all tracked building sprites
     for (const sprite of this.buildingSprites.values()) {
       sprite.destroy();
@@ -144,19 +162,32 @@ export class FactoryScene extends Scene {
       const baseKey = getBuildingTextureKey(building.type, building.direction, frame);
       const key = `${baseKey}_${building.faulted ? "faulted" : "ok"}`;
 
-      const sprite = this.add.sprite(
-        building.x * TILE_SIZE + TILE_SIZE / 2,
-        building.y * TILE_SIZE + TILE_SIZE / 2,
-        key
-      );
+      // Hub is 2x2 tiles, so position at center and set display size to 64x64
+      const isHub = building.type === "hub";
+      let posX: number;
+      let posY: number;
+      if (isHub) {
+        // Center of 2x2 hub at (x+1, y+1)
+        posX = (building.x + 1) * TILE_SIZE;
+        posY = (building.y + 1) * TILE_SIZE;
+      } else {
+        // 1x1 building centered in tile
+        posX = building.x * TILE_SIZE + TILE_SIZE / 2;
+        posY = building.y * TILE_SIZE + TILE_SIZE / 2;
+      }
+
+      const sprite = this.add.sprite(posX, posY, key);
+      if (isHub) {
+        sprite.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2);
+      }
       sprite.setDepth(building.y);
       this.buildingSprites.set(building.id, sprite);
 
       // Create fault overlay for faulted buildings
       if (building.faulted) {
         const faultOverlay = this.add.graphics();
-        faultOverlay.x = building.x * TILE_SIZE + TILE_SIZE / 2;
-        faultOverlay.y = building.y * TILE_SIZE + TILE_SIZE / 2;
+        faultOverlay.x = posX;
+        faultOverlay.y = posY;
         faultOverlay.setDepth(building.y + 1); // Above building
         
         // Draw red warning indicator (exclamation mark shape)
@@ -165,8 +196,8 @@ export class FactoryScene extends Scene {
         
         // Draw a warning triangle/exclamation indicator
         const size = 8;
-        const x = building.x * TILE_SIZE + TILE_SIZE / 2;
-        const y = building.y * TILE_SIZE;
+        const x = posX;
+        const y = isHub ? posY - TILE_SIZE : posY - TILE_SIZE / 2;
         
         // Draw exclamation mark - top bar
         faultOverlay.fillRect(x - size / 2, y - 4, size, 2);
@@ -236,6 +267,10 @@ export class FactoryScene extends Scene {
     camera.setBounds(0, 0, 64 * TILE_SIZE, 64 * TILE_SIZE);
     camera.setZoom(1);
 
+    // Center camera on hub origin (hub is 2x2 tiles, so center is at (hubOrigin.x + 1) * TILE_SIZE, (hubOrigin.y + 1) * TILE_SIZE)
+    const hubOrigin = this.world?.hubOrigin ?? { x: 31, y: 31 };
+    camera.centerOn((hubOrigin.x + 1) * TILE_SIZE, (hubOrigin.y + 1) * TILE_SIZE);
+
     let dragStartTile: { x: number; y: number } | null = null;
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
@@ -274,6 +309,18 @@ export class FactoryScene extends Scene {
         camera.scrollY += dy * CAMERA_SPEED;
         this.lastMousePos = { x: pointer.x, y: pointer.y };
       }
+
+      // Track hover position for ghost updates on rotation
+      const tileX = Math.floor(pointer.worldX / TILE_SIZE);
+      const tileY = Math.floor(pointer.worldY / TILE_SIZE);
+      this.lastHoveredTile = { x: tileX, y: tileY };
+
+      // Update placement ghost preview when in place mode with a selected building
+      if (this.inputState?.mode === "place" && this.inputState.selectedBuilding && this.placementGhost) {
+        this.placementGhost.update(tileX, tileY, this.inputState.selectedBuilding, this.inputState.direction);
+      } else if (this.placementGhost) {
+        this.placementGhost.hide();
+      }
     });
 
     this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
@@ -295,10 +342,13 @@ export class FactoryScene extends Scene {
       }
     });
 
-    // Mouse wheel zoom
-    this.input.on("wheel", (_pointer: Phaser.Input.Pointer, _deltaX: number, deltaZ: number) => {
+    // Mouse wheel zoom - Phaser 3 wheel event signature: (pointer, gameObjects, deltaX, deltaY)
+    this.input.on("wheel", (_pointer: Phaser.Input.Pointer, _gameObjects: unknown, _deltaX: number, deltaY: number) => {
+      if (deltaY === 0) return;
       const currentZoom = camera.zoom;
-      const newZoom = currentZoom + deltaZ * ZOOM_SENSITIVITY;
+      // Negative deltaY = wheel up = zoom in (+ZOOM_SENSITIVITY)
+      // Positive deltaY = wheel down = zoom out (-ZOOM_SENSITIVITY)
+      const newZoom = currentZoom - Math.sign(deltaY) * ZOOM_SENSITIVITY;
       camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
     });
   }
@@ -308,21 +358,29 @@ export class FactoryScene extends Scene {
    */
   private setupKeyboardControls(): void {
     const cursors = this.input.keyboard?.createCursorKeys();
-    const wKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-    const aKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    const sKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    const dKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    const wKey = this.input.keyboard?.addKey("W");
+    const aKey = this.input.keyboard?.addKey("A");
+    const sKey = this.input.keyboard?.addKey("S");
+    const dKey = this.input.keyboard?.addKey("D");
 
     if (this.input.keyboard) {
       this.input.keyboard.on("keydown-R", () => {
         if (!this.inputState) return;
         this.inputState.direction = rotateDirection(this.inputState.direction);
+        // Update placement ghost preview immediately with new direction
+        if (this.placementGhost && this.inputState.mode === "place" && this.inputState.selectedBuilding && this.lastHoveredTile) {
+          this.placementGhost.update(this.lastHoveredTile.x, this.lastHoveredTile.y, this.inputState.selectedBuilding, this.inputState.direction);
+        }
         this.events.emit("worldMutated");
       });
 
       this.input.keyboard.on("keydown-X", () => {
         if (!this.inputState) return;
         this.inputState.mode = "demolish";
+        // Hide placement ghost when switching to demolish mode
+        if (this.placementGhost) {
+          this.placementGhost.hide();
+        }
         this.events.emit("worldMutated");
       });
     }
