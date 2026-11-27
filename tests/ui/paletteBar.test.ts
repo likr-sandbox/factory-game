@@ -59,16 +59,20 @@ describe("mountPaletteBar", () => {
   let container: MockElement; let doc: MockDocument;
   beforeEach(() => { doc = new MockDocument(); container = doc.createElement("div"); });
 
-  it("renders Japanese building buttons (採掘機，コンベア，分配器，精錬炉，組立機)", () => {
+  it("renders Japanese building buttons including filter_splitter, underground_belt, recycler, and sensor", () => {
     const onBuildingSelect = vi.fn();
     const handle = mountPaletteBar(container as unknown as HTMLElement, { onBuildingSelect, onRotate: vi.fn(), onDemolish: vi.fn(), onInspectToggle: vi.fn() });
     const btns = container.querySelectorAll("button");
-    expect(btns.length).toBe(8); // 5 building + 3 action
+    expect(btns.length).toBe(12); // 9 building + 3 action
     expect(btns[0]!.textContent).toBe("採掘機");
     expect(btns[1]!.textContent).toBe("コンベア");
     expect(btns[2]!.textContent).toBe("分配器");
-    expect(btns[3]!.textContent).toBe("精錬炉");
-    expect(btns[4]!.textContent).toBe("組立機");
+    expect(btns[3]!.textContent).toBe("フィルター分配機");
+    expect(btns[4]!.textContent).toBe("交差ブリッジ");
+    expect(btns[5]!.textContent).toBe("精錬炉");
+    expect(btns[6]!.textContent).toBe("組立機");
+    expect(btns[7]!.textContent).toBe("不純物処理炉");
+    expect(btns[8]!.textContent).toBe("センサー");
     handle.destroy();
   });
 

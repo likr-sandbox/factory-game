@@ -67,12 +67,27 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
   it("should create building sprites with correct texture keys including faulted state", () => {
     const scene = new FactoryScene();
     const spriteCalls: Array<{ texture: string }> = [];
+    const mockGraphics = {
+      x: 0,
+      y: 0,
+      setDepth: vi.fn(),
+      fillStyle: vi.fn(),
+      fillRect: vi.fn(),
+      fillCircle: vi.fn(),
+      lineStyle: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      strokePath: vi.fn(),
+      destroy: vi.fn(),
+    };
     scene.add = {
       sprite: vi.fn((_: number, __: number, texture: string) => {
         spriteCalls.push({ texture });
         return { setDepth: vi.fn(), setName: vi.fn(), destroy: vi.fn() };
       }),
       image: vi.fn(() => ({ destroy: vi.fn() })),
+      graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
 
@@ -99,6 +114,20 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
     const setNameCalls: string[] = [];
     const destroyCount = { value: 0 };
     
+    const mockGraphics = {
+      x: 0,
+      y: 0,
+      setDepth: vi.fn(),
+      fillStyle: vi.fn(),
+      fillRect: vi.fn(),
+      fillCircle: vi.fn(),
+      lineStyle: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      strokePath: vi.fn(),
+      destroy: vi.fn(),
+    };
     scene.add = {
       sprite: vi.fn(() => ({
         setDepth: vi.fn(),
@@ -106,6 +135,7 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
         destroy: vi.fn(() => { destroyCount.value++; }),
       })),
       image: vi.fn(() => ({ destroy: vi.fn() })),
+      graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
 
@@ -141,6 +171,20 @@ describe("FactoryScene.renderTerrainTilemap", () => {
     const spritesCreated: string[] = [];
     const setDepthCalls: number[] = [];
 
+    const mockGraphics = {
+      x: 0,
+      y: 0,
+      setDepth: vi.fn(),
+      fillStyle: vi.fn(),
+      fillRect: vi.fn(),
+      fillCircle: vi.fn(),
+      lineStyle: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      strokePath: vi.fn(),
+      destroy: vi.fn(),
+    };
     scene.add = {
       image: vi.fn((_: number, __: number, texture: string) => {
         imagesCreated.push(texture);
@@ -150,6 +194,7 @@ describe("FactoryScene.renderTerrainTilemap", () => {
         spritesCreated.push(texture);
         return { setDepth: vi.fn((d: number) => { setDepthCalls.push(d); }), destroy: vi.fn() };
       }),
+      graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
 
@@ -180,9 +225,24 @@ describe("FactoryScene.renderTerrainTilemap", () => {
   it("should fallback to grass-only grid when world is not bound", () => {
     const scene = new FactoryScene();
     const imagesCreated: string[] = [];
+    const mockGraphics = {
+      x: 0,
+      y: 0,
+      setDepth: vi.fn(),
+      fillStyle: vi.fn(),
+      fillRect: vi.fn(),
+      fillCircle: vi.fn(),
+      lineStyle: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      strokePath: vi.fn(),
+      destroy: vi.fn(),
+    };
     scene.add = {
       image: vi.fn((_: number, __: number, texture: string) => { imagesCreated.push(texture); return { destroy: vi.fn() }; }),
       sprite: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn() })),
+      graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
     scene.renderTerrainTilemap();

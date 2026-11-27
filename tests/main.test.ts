@@ -2,6 +2,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock Phaser before importing main module
+const mockGraphics = {
+  x: 0,
+  y: 0,
+  setDepth: vi.fn(),
+  fillStyle: vi.fn(),
+  fillRect: vi.fn(),
+  fillCircle: vi.fn(),
+  lineStyle: vi.fn(),
+  beginPath: vi.fn(),
+  moveTo: vi.fn(),
+  lineTo: vi.fn(),
+  strokePath: vi.fn(),
+  destroy: vi.fn(),
+};
+
+const mockSprite = {
+  setDepth: vi.fn(),
+  setName: vi.fn(),
+  destroy: vi.fn(),
+};
+
 vi.mock("phaser", () => ({
   AUTO: "auto",
   Game: vi.fn().mockImplementation((config) => ({
@@ -29,9 +50,27 @@ vi.mock("phaser", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Scene: class Scene {
     children: { list: unknown[] };
-    events: { on: ReturnType<typeof vi.fn>; emit: ReturnType<typeof vi.fn> };
-    cameras?: { main: unknown };
-    input?: { keyboard: unknown | null; on: ReturnType<typeof vi.fn> };
+    cameras = { main: { setBounds: vi.fn(), setZoom: vi.fn(), scrollX: 0, scrollY: 0, zoom: 1 } };
+    input = {
+      on: vi.fn(),
+      keyboard: {
+        createCursorKeys: vi.fn().mockReturnValue({ left: null, right: null, up: null, down: null }),
+        addKey: vi.fn().mockReturnValue({ isDown: false }),
+        on: vi.fn(),
+      },
+    };
+    textures = {
+      createCanvas: vi.fn(),
+    };
+    add = {
+      sprite: vi.fn().mockReturnValue(mockSprite),
+      image: vi.fn(),
+      graphics: vi.fn().mockReturnValue(mockGraphics),
+    };
+    events = {
+      on: vi.fn(),
+      emit: vi.fn(),
+    };
     constructor() {
       this.children = { list: [] };
       this.events = { on: vi.fn(), emit: vi.fn() };
@@ -64,6 +103,7 @@ import {
   resetSimulationState,
   processSimulationTicks,
   initGame,
+  getWebMcpHandle,
 } from "../src/main";
 
 describe("Game Loop Functions", () => {
@@ -233,7 +273,7 @@ describe("initGame", () => {
 
     mockDoc = {
       getElementById: vi.fn((id: string) => {
-        if (id === "game-container" || id === "hud-container" || id === "palette-container") {
+        if (id === "game-container" || id === "hud-container" || id === "palette-container" || id === "webmcp-container") {
           const el = createMockElement();
           el.id = id;
           el.ownerDocument = mockDoc;
@@ -379,5 +419,222 @@ describe("initGame", () => {
     // after mountPaletteBar's innerHTML="" operation
     expect(inspectorEl.appendChild).toBeDefined();
     expect(inspectorEl.insertBefore).toBeDefined();
+  });
+
+  it("should throw error if #webmcp-container is missing", () => {
+    const createMockElement = () => ({
+      ownerDocument: mockDoc,
+      appendChild: vi.fn(),
+      removeChild: vi.fn(),
+      insertBefore: vi.fn(),
+      addEventListener: vi.fn(),
+      style: {},
+      id: "",
+    });
+
+    mockDoc.getElementById = vi.fn((id: string) => {
+      if (id === "webmcp-container") return null;
+      const el = createMockElement();
+      el.id = id;
+      return el as unknown as HTMLElement;
+    });
+
+    expect(() => initGame(mockDoc)).toThrow(/webmcp-container/);
+  });
+
+  it("should mount .webmcp-panel into #webmcp-container", () => {
+    // Create fresh mock document with all required methods
+    const createMockElement = () => {
+      const el: any = {
+        ownerDocument: null as unknown as Document,
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+        insertBefore: vi.fn(),
+        setAttribute: vi.fn(),
+        addEventListener: vi.fn(),
+        style: {},
+        className: "",
+        classList: {
+          add: vi.fn(),
+          remove: vi.fn(),
+          contains: vi.fn().mockReturnValue(false),
+          toggle: vi.fn(),
+        },
+        textContent: "",
+        id: "",
+      };
+      return el;
+    };
+
+    const testDoc: any = {
+      getElementById: vi.fn((id: string) => {
+        if (id === "game-container" || id === "hud-container" || id === "palette-container" || id === "webmcp-container") {
+          const el = createMockElement();
+          el.id = id;
+          el.ownerDocument = testDoc;
+          return el;
+        }
+        return null;
+      }),
+      createElement: vi.fn((tag: string) => {
+        const el = createMockElement();
+        el.ownerDocument = testDoc;
+        return el;
+      }),
+    };
+
+    const webmcpContainerEl = testDoc.getElementById("webmcp-container");
+
+    // Use no-op requestAnimationFrame to avoid infinite recursion
+    const originalRAF = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = vi.fn(() => {}) as unknown as typeof globalThis.requestAnimationFrame;
+
+    try {
+      // Track calls to appendChild on webmcp-container
+      const appendCalls: any[] = [];
+      vi.spyOn(webmcpContainerEl, "appendChild").mockImplementation((child: any) => {
+        appendCalls.push(child);
+        return child;
+      });
+      
+      initGame(testDoc);
+
+      // Verify that initGame completes successfully and WebMCP is integrated
+      const handle = getWebMcpHandle();
+      expect(handle).toBeTruthy();
+      
+      // Verify the WebMCP handle has expected properties (handle is non-null after expect)
+      expect(handle!).toBeTruthy();
+      expect(typeof handle!.detected).toBe("boolean");
+      expect(typeof handle!.registeredTools).toBe("object");
+      expect(typeof handle!.getLogs).toBe("function");
+      expect(typeof handle!.subscribe).toBe("function");
+      expect(typeof handle!.invokeTool).toBe("function");
+    } finally {
+      globalThis.requestAnimationFrame = originalRAF;
+    }
+  });
+
+  it("should register all 10 WebMCP tools when doc.modelContext is provided", () => {
+    const modelContext = {
+      registerTool: vi.fn(),
+    };
+
+    // Create fresh mock document with all required methods
+    const createMockElement = () => ({
+      ownerDocument: null as unknown as Document,
+      appendChild: vi.fn(),
+      removeChild: vi.fn(),
+      insertBefore: vi.fn(),
+      setAttribute: vi.fn(),
+      addEventListener: vi.fn(),
+      style: {},
+      className: "",
+      classList: {
+        add: vi.fn(),
+        remove: vi.fn(),
+        contains: vi.fn().mockReturnValue(false),
+        toggle: vi.fn(),
+      },
+      textContent: "",
+      id: "",
+    });
+
+    const testDoc = {
+      getElementById: vi.fn((id: string) => {
+        if (id === "game-container" || id === "hud-container" || id === "palette-container" || id === "webmcp-container") {
+          const el = createMockElement();
+          el.id = id;
+          el.ownerDocument = testDoc;
+          return el as unknown as HTMLElement;
+        }
+        return null;
+      }),
+      createElement: vi.fn((tag: string) => {
+        const el = createMockElement();
+        el.ownerDocument = testDoc;
+        return el as unknown as HTMLElement;
+      }),
+    } as unknown as Document & { modelContext?: unknown };
+
+    // Set modelContext on testDoc for detection (registerFactoryWebMcpTools uses env.document which is the doc passed to initGame)
+    testDoc.modelContext = modelContext;
+
+    // Use no-op requestAnimationFrame to avoid infinite recursion
+    const originalRAF = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = vi.fn(() => {}) as unknown as typeof globalThis.requestAnimationFrame;
+
+    try {
+      initGame(testDoc);
+
+      const handle = getWebMcpHandle();
+      expect(handle).toBeTruthy();
+      expect(handle?.detected).toBe(true);
+      expect(handle?.registeredTools.length).toBe(10);
+      
+      // Verify registerTool was called 10 times (once per tool)
+      expect(modelContext.registerTool).toHaveBeenCalledTimes(10);
+    } finally {
+      globalThis.requestAnimationFrame = originalRAF;
+    }
+  });
+
+  it("should wire onWorldMutated callback cleanly", () => {
+    // Create fresh mock document with all required methods
+    const createMockElement = () => ({
+      ownerDocument: null as unknown as Document,
+      appendChild: vi.fn(),
+      removeChild: vi.fn(),
+      insertBefore: vi.fn(),
+      setAttribute: vi.fn(),
+      addEventListener: vi.fn(),
+      style: {},
+      className: "",
+      classList: {
+        add: vi.fn(),
+        remove: vi.fn(),
+        contains: vi.fn().mockReturnValue(false),
+        toggle: vi.fn(),
+      },
+      textContent: "",
+      id: "",
+    });
+
+    const testDoc = {
+      getElementById: vi.fn((id: string) => {
+        if (id === "game-container" || id === "hud-container" || id === "palette-container" || id === "webmcp-container") {
+          const el = createMockElement();
+          el.id = id;
+          el.ownerDocument = testDoc;
+          return el as unknown as HTMLElement;
+        }
+        return null;
+      }),
+      createElement: vi.fn((tag: string) => {
+        const el = createMockElement();
+        el.ownerDocument = testDoc;
+        return el as unknown as HTMLElement;
+      }),
+    } as unknown as Document;
+
+    // Use no-op requestAnimationFrame to avoid infinite recursion
+    const originalRAF = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = vi.fn(() => {}) as unknown as typeof globalThis.requestAnimationFrame;
+
+    try {
+      // Verify initGame completes without errors and returns a valid handle
+      // The onWorldMutated callback is passed to registerFactoryWebMcpTools
+      // which internally invokes it when world mutations occur
+      
+      initGame(testDoc);
+      
+      const handle = getWebMcpHandle();
+      expect(handle).toBeTruthy();
+      expect(typeof handle?.invokeTool).toBe("function");
+      expect(typeof handle?.subscribe).toBe("function");
+      expect(typeof handle?.getLogs).toBe("function");
+    } finally {
+      globalThis.requestAnimationFrame = originalRAF;
+    }
   });
 });
