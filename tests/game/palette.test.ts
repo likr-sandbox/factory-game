@@ -69,6 +69,20 @@ describe("TERRAIN_PALETTE", () => {
     const uniqueColors = new Set(hexColors);
     expect(uniqueColors.size).toBe(3);
   });
+
+  it("should have calm, non-neon grass color (green channel < 180)", () => {
+    const grassHex = TERRAIN_PALETTE.grass.hex;
+    // Extract RGB values from hex
+    const r = parseInt(grassHex.slice(1, 3), 16);
+    const g = parseInt(grassHex.slice(3, 5), 16);
+    const b = parseInt(grassHex.slice(5, 7), 16);
+    
+    // Green channel should be muted (< 180) to avoid neon lawn green
+    expect(g).toBeLessThan(180);
+    
+    // Also verify it's not the old neon green #7CFC00
+    expect(grassHex.toLowerCase()).not.toBe("#7cfc00");
+  });
 });
 
 // ============================================================================
@@ -93,6 +107,13 @@ describe("DEPOSIT_PALETTE", () => {
     const hexColors = Object.values(DEPOSIT_PALETTE).map((p: PaletteEntry) => p.hex.toLowerCase());
     const uniqueColors = new Set(hexColors);
     expect(uniqueColors.size).toBe(14);
+  });
+
+  it("should have iron_ore, copper_ore, coal, and silica_sand with distinct hex colors", () => {
+    const keyOres: MaterialId[] = ["iron_ore", "copper_ore", "coal", "silica_sand"];
+    const oreColors = keyOres.map((m) => DEPOSIT_PALETTE[m].hex.toLowerCase());
+    const uniqueOreColors = new Set(oreColors);
+    expect(uniqueOreColors.size).toBe(4);
   });
 });
 
