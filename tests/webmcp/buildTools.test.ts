@@ -143,6 +143,19 @@ describe("createBuildToolHandlers", () => {
     expect(mutated).toBe(false);
   });
 
+  it("should reject placing hub building with success: false and error code, without invoking onWorldMutated", () => {
+    const world = createWorld(42);
+    let mutated = false;
+    const handlers = createBuildToolHandlers(() => world, () => { mutated = true; });
+
+    const result = handlers.place_building({ x: 5, y: 5, type: "hub", direction: "N" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("HUB_PROTECTED");
+    }
+    expect(mutated).toBe(false);
+  });
+
   it("should successfully unlock a tech with sufficient research points", () => {
     const world = createWorld(42);
     world.researchPoints = 200; // Enough for underground_belt (cost: 150)
