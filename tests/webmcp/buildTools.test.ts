@@ -142,4 +142,67 @@ describe("createBuildToolHandlers", () => {
     expect(result.success).toBe(false);
     expect(mutated).toBe(false);
   });
+
+  it("should successfully unlock a tech with sufficient research points", () => {
+    const world = createWorld(42);
+    world.researchPoints = 200; // Enough for underground_belt (cost: 150)
+    let mutated = false;
+    const handlers = createBuildToolHandlers(() => world, () => { mutated = true; });
+
+    const result = handlers.unlock_tech({ techId: "underground_belt" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changes).toBeDefined();
+      expect((result.changes as { unlockedTech?: string }).unlockedTech).toBe("underground_belt");
+    }
+    expect(mutated).toBe(true);
+    // Research points should be deducted
+    expect(world.researchPoints).toBe(50); // 200 - 150
+    expect(world.unlockedTechs).toContain("underground_belt");
+  });
+
+  it("should return INSUFFICIENT_POINTS error when research points are too low", () => {
+    const world = createWorld(42);
+    world.researchPoints = 50; // Not enough for any tech
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.unlock_tech({ techId: "underground_belt" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INSUFFICIENT_POINTS");
+    }
+  });
+
+  it("should return INVALID_TECH error for unknown tech ID", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.unlock_tech({ techId: "invalid_tech" as any });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_TECH");
+    }
+  });
+
+  it("should return INVALID_INPUT error for missing techId", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.unlock_tech({} as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should not call onWorldMutated when unlock_tech fails", () => {
+    const world = createWorld(42);
+    world.researchPoints = 50; // Insufficient
+    let mutated = false;
+    const handlers = createBuildToolHandlers(() => world, () => { mutated = true; });
+
+    const result = handlers.unlock_tech({ techId: "underground_belt" });
+    expect(result.success).toBe(false);
+    expect(mutated).toBe(false);
+  });
 });
