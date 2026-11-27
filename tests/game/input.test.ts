@@ -62,6 +62,7 @@ describe("Input Controller", () => {
     it("should place a filter_splitter with filterMaterial when selectedFilter is set", () => {
       const s = createInputState(); s.mode = "place"; s.selectedBuilding = "filter_splitter"; s.direction = "E";
       s.selectedFilter = "iron_plate";
+      world.unlockedTechs.push("filter_splitter");
       const r = handleTileClick(world, s, 10, 10);
       expect(r.success).toBe(true);
       const t = world.tiles[10]![10]!;
@@ -75,6 +76,7 @@ describe("Input Controller", () => {
       const freshWorld = createWorld(123);
       const s = createInputState(); s.mode = "place"; s.selectedBuilding = "filter_splitter"; s.direction = "E";
       s.selectedFilter = null;
+      freshWorld.unlockedTechs.push("filter_splitter");
       const r = handleTileClick(freshWorld, s, 10, 10);
       expect(r.success).toBe(true);
       const t = freshWorld.tiles[10]![10]!;
@@ -85,6 +87,7 @@ describe("Input Controller", () => {
     });
 
     it("should place underground_belt, recycler, and sensor buildings", () => {
+      world.unlockedTechs.push("underground_belt", "recycler", "sensor");
       const s1 = createInputState(); s1.mode = "place"; s1.selectedBuilding = "underground_belt";
       const r1 = handleTileClick(world, s1, 12, 12);
       expect(r1.success).toBe(true);
@@ -99,6 +102,16 @@ describe("Input Controller", () => {
       const r3 = handleTileClick(world, s3, 14, 14);
       expect(r3.success).toBe(true);
       expect(world.buildings[world.tiles[14]![14]!.buildingId!]!.type).toBe("sensor");
+    });
+
+    it("should return TECH_LOCKED error when placing filter_splitter without unlocked tech", () => {
+      const freshWorld = createWorld(456);
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "filter_splitter"; s.direction = "E";
+      const r = handleTileClick(freshWorld, s, 10, 10);
+      expect(r.success).toBe(false);
+      if (!r.success) {
+        expect(r.error.code).toBe("TECH_LOCKED");
+      }
     });
   });
 

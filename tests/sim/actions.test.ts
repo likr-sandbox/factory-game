@@ -62,19 +62,34 @@ describe("placeBuilding", () => {
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("INVALID_RECIPE");
   });
 
-  it("should fail when placing locked building type (assembler)", () => {
-    // assembler requires electronics tech
-    const r = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
+  it("should fail when placing duplicate hub building", () => {
+    // Hub should be rejected even on empty grass tile
+    const r = placeBuilding(world, { x: 5, y: 5, type: "hub", direction: "N" });
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("HUB_PROTECTED");
+    expect(getFailureResult(r).error.message).toBe("Cannot place additional hub buildings");
+  });
+
+  it("should fail when placing locked building type (filter_splitter)", () => {
+    // filter_splitter requires filter_splitter tech
+    const r = placeBuilding(world, { x: 10, y: 10, type: "filter_splitter", direction: "N" });
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("TECH_LOCKED");
   });
 
   it("should succeed when placing locked building after unlocking tech", () => {
-    // Unlock electronics tech first
-    world.researchPoints = 300;
-    const unlockResult = unlockTech(world, "electronics");
+    // Unlock filter_splitter tech first
+    world.researchPoints = 100;
+    const unlockResult = unlockTech(world, "filter_splitter");
     expect(unlockResult).toBe(true);
     
-    // Now should be able to place assembler
+    // Now should be able to place filter_splitter
+    const r = placeBuilding(world, { x: 10, y: 10, type: "filter_splitter", direction: "N" });
+    expect(r.success).toBe(true);
+  });
+
+  it("should succeed when placing assembler by default with iron_gear recipe", () => {
+    // assembler is unlocked by default (requires electronics tech, but iron_gear recipe is available early)
+    // Verify assembler can be placed without unlocking any tech
     const r = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
     expect(r.success).toBe(true);
   });

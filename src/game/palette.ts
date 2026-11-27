@@ -22,7 +22,7 @@ export type MaterialPalette = Record<MaterialId, PaletteEntry>;
 // ============================================================================
 
 export const TERRAIN_PALETTE: TerrainPalette = {
-  grass: { hex: "#7CFC00", css: "rgb(124, 252, 0)" },     // Lawn green
+  grass: { hex: "#4A7C3E", css: "rgb(74, 124, 62)" },      // Muted natural green
   rock: { hex: "#808080", css: "rgb(128, 128, 128)" },     // Gray
   water: { hex: "#1E90FF", css: "rgb(30, 144, 255)" },     // Dodger blue
 };
@@ -32,10 +32,10 @@ export const TERRAIN_PALETTE: TerrainPalette = {
 // ============================================================================
 
 export const DEPOSIT_PALETTE: DepositPalette = {
-  iron_ore: { hex: "#D2691E", css: "rgb(210, 105, 30)" },     // Chocolate
-  copper_ore: { hex: "#CD853F", css: "rgb(205, 133, 63)" },   // Peru
-  coal: { hex: "#2F4F4F", css: "rgb(47, 79, 79)" },           // Dark slate gray
-  silica_sand: { hex: "#F0E68C", css: "rgb(240, 230, 140)" }, // Khaki
+  iron_ore: { hex: "#5D737E", css: "rgb(93, 115, 126)" },       // Cool steel-blue
+  copper_ore: { hex: "#D2691E", css: "rgb(210, 105, 30)" },     // Bright copper-orange
+  coal: { hex: "#222629", css: "rgb(34, 38, 41)" },             // Deep charcoal
+  silica_sand: { hex: "#E8D9A0", css: "rgb(232, 217, 160)" },   // Pale warm sand
   // Processed materials use material palette, not deposit palette
   iron_plate: { hex: "#C0C0C0", css: "rgb(192, 192, 192)" },   // Silver
   copper_plate: { hex: "#B87333", css: "rgb(184, 115, 51)" },  // Copper

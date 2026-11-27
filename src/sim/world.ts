@@ -340,7 +340,7 @@ export function createWorld(seed: number = 12345): WorldState {
     // Progression fields
     researchPoints: 0,
     // Tutorial fields
-    tutorialPhase: 0,
+    tutorialPhase: 1,
     completedTutorialSteps: [],
     // Dynamic quest fields
     activeQuests: [],
