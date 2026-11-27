@@ -21,12 +21,24 @@ describe("Query Functions", () => {
       expect(summary.completedQuests).toEqual([]);
       expect(summary.researchPoints).toBe(0);
       expect(summary.techTree).toBeDefined();
-      expect(summary.techTree.undergroundBelt).toBe(true);
-      expect(summary.techTree.sensor).toBe(true);
-      expect(summary.techTree.recycler).toBe(true);
-      expect(summary.techTree.electronics.assembler).toBe(false);
+      // Initial tech tree state: basic buildings unlocked, tech-gated buildings not unlocked
+      expect(summary.techTree.undergroundBelt).toBe(false);
+      expect(summary.techTree.filterSplitter).toBe(false);
+      expect(summary.techTree.sensor).toBe(false);
+      expect(summary.techTree.recycler).toBe(false);
+      // Electronics tech not unlocked, but assembler building is unlocked by default
+      expect(summary.techTree.electronics.assembler).toBe(true);
+      expect(summary.techTree.electronics.circuitBoard).toBe(false);
+      expect(summary.techTree.electronics.microchip).toBe(false);
+      // Advanced smelting recipes not unlocked
+      expect(summary.techTree.advancedSmelting.steelPlate).toBe(false);
+      expect(summary.techTree.advancedSmelting.siliconWafer).toBe(false);
+      // Automation module not unlocked
+      expect(summary.techTree.automation.automationModule).toBe(false);
       expect(summary.tutorialProgress).toBeDefined();
-      expect(summary.tutorialProgress.phase).toBe(0);
+      // Initial tutorial state: phase 1, currentStep not null (first step pending)
+      expect(summary.tutorialProgress.phase).toBe(1);
+      expect(summary.tutorialProgress.currentStep).not.toBeNull();
       expect(summary.activeQuests).toEqual([]);
     });
 
@@ -178,6 +190,41 @@ describe("Query Functions", () => {
         expect(recipe.inputs).toBeDefined();
         expect(recipe.outputs).toBeDefined();
       }
+    });
+
+    it("marks basic recipes as unlocked and tech-gated recipes as locked", () => {
+      const world = createWorld(12345);
+      const recipes = listRecipes(world);
+
+      // Basic recipes should be unlocked by default
+      const ironPlateRecipe = recipes.find((r: RecipeInfo) => r.id === "iron_plate");
+      const copperPlateRecipe = recipes.find((r: RecipeInfo) => r.id === "copper_plate");
+      const ironGearRecipe = recipes.find((r: RecipeInfo) => r.id === "iron_gear");
+      const copperWireRecipe = recipes.find((r: RecipeInfo) => r.id === "copper_wire");
+      
+      expect(ironPlateRecipe).toBeDefined();
+      expect(copperPlateRecipe).toBeDefined();
+      expect(ironGearRecipe).toBeDefined();
+      expect(copperWireRecipe).toBeDefined();
+      expect((ironPlateRecipe?.unlocked as boolean)).toBe(true);
+      expect((copperPlateRecipe?.unlocked as boolean)).toBe(true);
+      expect((ironGearRecipe?.unlocked as boolean)).toBe(true);
+      expect((copperWireRecipe?.unlocked as boolean)).toBe(true);
+
+      // Tech-gated recipes should NOT be unlocked initially
+      const steelPlateRecipe = recipes.find((r: RecipeInfo) => r.id === "steel_plate");
+      const circuitBoardRecipe = recipes.find((r: RecipeInfo) => r.id === "circuit_board");
+      const microchipRecipe = recipes.find((r: RecipeInfo) => r.id === "microchip");
+      const automationModuleRecipe = recipes.find((r: RecipeInfo) => r.id === "automation_module");
+      
+      expect(steelPlateRecipe).toBeDefined();
+      expect(circuitBoardRecipe).toBeDefined();
+      expect(microchipRecipe).toBeDefined();
+      expect(automationModuleRecipe).toBeDefined();
+      expect((steelPlateRecipe?.unlocked as boolean)).toBe(false);
+      expect((circuitBoardRecipe?.unlocked as boolean)).toBe(false);
+      expect((microchipRecipe?.unlocked as boolean)).toBe(false);
+      expect((automationModuleRecipe?.unlocked as boolean)).toBe(false);
     });
 
     it("includes unlocked status", () => {

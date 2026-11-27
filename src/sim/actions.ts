@@ -30,6 +30,11 @@ export function placeBuilding(
     return { success: false, error: { code: "INVALID_TERRAIN", message: `Cannot place on ${tile.terrain}`, details: { x, y, terrain: tile.terrain } } };
   }
 
+  // Reject duplicate hub placement explicitly
+  if (type === "hub") {
+    return { success: false, error: { code: "HUB_PROTECTED", message: "Cannot place additional hub buildings", details: { x, y, type } } };
+  }
+
   // Check if already has a building
   if (tile.buildingId !== null) {
     return { success: false, error: { code: "OCCUPIED", message: `Tile (${x},${y}) already has building ${tile.buildingId}`, details: { x, y, buildingId: tile.buildingId } } };
