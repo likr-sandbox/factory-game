@@ -31,7 +31,8 @@ const BUILDING_NAMES: Record<string, string> = {
 export function createInspector(container: HTMLElement, callbacks: InspectorCallbacks): InspectorHandle {
   const doc = container.ownerDocument;
   const panel = doc.createElement("div");
-  panel.style.cssText = "background:rgba(22,33,62,0.95);border:2px solid #4a4a6a;border-radius:8px;padding:12px;min-width:200px;color:#eaeaea;font-family:'Segoe UI',sans-serif";
+  panel.className = "inspector-panel";
+  panel.style.cssText = "background:rgba(22,33,62,0.95);border:2px solid #4a4a6a;border-radius:8px;padding:12px;min-width:220px;max-width:320px;color:#eaeaea;font-family:'Segoe UI',sans-serif";
   container.appendChild(panel);
 
   const infoDiv = doc.createElement("div");
@@ -75,14 +76,15 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
     lastPopulatedType = buildingType;
   }
 
-  function updateBuildingInfo(building: BuildingState | null): void {
+  function updateBuildingInfo(building: BuildingState | null, coord: { x: number; y: number } | null): void {
     if (!building) {
       infoDiv.textContent = LABELS.none;
       repairBtn.style.display = recipeLabel.style.display = recipeSelect.style.display = "none";
       lastPopulatedType = null;
       return;
     }
-    infoDiv.textContent = BUILDING_NAMES[building.type] + (building.faulted ? ` ${LABELS.faulted}` : "");
+    const coordText = coord ? ` (${coord.x}, ${coord.y})` : "";
+    infoDiv.textContent = BUILDING_NAMES[building.type] + coordText + (building.faulted ? ` ${LABELS.faulted}` : "");
     repairBtn.style.display = building.faulted ? "block" : "none";
 
     if (building.type === "smelter" || building.type === "assembler") {
@@ -107,7 +109,7 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
       const tile = world.tiles[coord.y]?.[coord.x];
       if (tile?.buildingId) building = world.buildings[tile.buildingId] ?? null;
     }
-    updateBuildingInfo(building);
+    updateBuildingInfo(building, coord);
   }
 
   function destroy(): void { if (panel.parentNode) panel.parentNode.removeChild(panel); }
