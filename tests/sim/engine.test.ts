@@ -445,3 +445,177 @@ describe("Faulted building stop and repair", () => {
     expect(smelter.outputBuffer.iron_plate).toBeGreaterThan(0);
   });
 });
+
+describe("Underground belt integration", () => {
+  it("transports items from underground_belt through intermediate belts to exit underground_belt", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Create a line: underground_belt -> belt -> belt -> underground_belt -> belt
+    // All facing South, with underground belts within range (4 tiles apart)
+    // under1 at y=10, under2 at y=13 (3 tiles apart, within UNDERGROUND_RANGE=4)
+    const under1Id = placeBuilding(world, 10, 10, "underground_belt", "S");
+    const belt1Id = placeBuilding(world, 10, 11, "belt", "S");
+    const belt2Id = placeBuilding(world, 10, 12, "belt", "S");
+    const under2Id = placeBuilding(world, 10, 13, "underground_belt", "S");
+    const belt3Id = placeBuilding(world, 10, 14, "belt", "S");
+
+    const under1 = world.buildings[under1Id]!;
+    const belt3Building = world.buildings[belt3Id]!;
+
+    // Add item to first underground belt's input buffer
+    under1.inputBuffer.iron_plate = 1;
+
+    // Process ticks - underground belt should transfer items to matching underground belt
+    // Then the exit underground belt pushes to the belt in front
+    stepTicks(world, 5);
+
+    // After underground transfer, under2 should have the item in its input buffer
+    // and then push it to belt3
+    // Check that item made it through the underground connection
+    expect(under1.inputBuffer.iron_plate).toBe(0); // Item left under1
+    
+    // The item should now be either in under2's buffer or belt3
+    const under2 = world.buildings[under2Id]!;
+    const under2HasItem = (under2.inputBuffer.iron_plate || 0) > 0 || under2.beltItems.length > 0;
+    const belt3HasItem = belt3Building.beltItems.length > 0;
+    
+    expect(under2HasItem || belt3HasItem).toBe(true);
+  });
+
+  it("transfers belt items through underground belt chain", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Create: underground_belt -> belt -> underground_belt -> belt
+    // underground belts within range (2 tiles apart)
+    const under1Id = placeBuilding(world, 20, 20, "underground_belt", "E");
+    const belt1Id = placeBuilding(world, 21, 20, "belt", "E");
+    const under2Id = placeBuilding(world, 22, 20, "underground_belt", "E");
+    const belt2Id = placeBuilding(world, 23, 20, "belt", "E");
+
+    const under1 = world.buildings[under1Id]!;
+    const under2 = world.buildings[under2Id]!;
+    const belt2Building = world.buildings[belt2Id]!;
+
+    // Add item directly to under1's belt items
+    under1.beltItems.push({ material: "copper_plate", movedAtTick: 0 });
+
+    // Process ticks - item should move through underground connection
+    stepTicks(world, 5);
+
+    // Item should eventually reach under2 or belt2 after traveling through underground
+    const under2HasItem = under2.beltItems.length > 0 || (under2.inputBuffer.copper_plate || 0) > 0;
+    const belt2HasItem = belt2Building.beltItems.length > 0;
+    
+    expect(under2HasItem || belt2HasItem).toBe(true);
+  });
+});
+
+describe("Overload and faulting integration", () => {
+  it("building becomes faulted after output blockage exceeds OVERLOAD_THRESHOLD", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place a smelter facing nothing (no building in front)
+    // This means output can't be pushed anywhere
+    const smelterId = placeBuilding(world, 10, 10, "smelter", "S", "iron_plate");
+
+    const smelter = world.buildings[smelterId]!;
+
+    // Provide input to smelter
+    smelter.inputBuffer.iron_ore = 100;
+
+    // Run ticks - smelter will craft and fill its output buffer
+    // Once output buffer is full, it becomes blocked
+    stepTicks(world, 60); // First craft completes
+    
+    // Fill the output buffer to MAX_OUTPUT_BUFFER (10 items)
+    // Each craft produces 1 iron_plate, so we need many crafts
+    // Actually, let's manually fill the buffer to simulate the condition
+    smelter.outputBuffer.iron_plate = 10; // MAX_OUTPUT_BUFFER
+
+    // Now the smelter is blocked (output full), continue running
+    // Each tick should increment load
+    stepTicks(world, 150);
+
+    // Smelter should become faulted due to continuous output blockage
+    // After enough ticks, load should exceed OVERLOAD_THRESHOLD (100)
+    expect(smelter.faulted).toBe(true);
+    expect(smelter.load).toBeGreaterThanOrEqual(100);
+  });
+
+  it("faulted building stops production after overload", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place assembler with no output destination
+    const assemblerId = placeBuilding(world, 15, 15, "assembler", "E", "iron_gear");
+
+    const assembler = world.buildings[assemblerId]!;
+    assembler.inputBuffer.iron_plate = 100;
+
+    // Craft some items first
+    stepTicks(world, 90);
+    const initialOutput = assembler.outputBuffer.iron_gear || 0;
+    expect(initialOutput).toBeGreaterThan(0);
+
+    // Fill output buffer to make it blocked
+    assembler.outputBuffer.iron_gear = 10; // MAX_OUTPUT_BUFFER
+
+    // Continue running - assembler should eventually fault from blocked output
+    stepTicks(world, 200);
+
+    // Once faulted, production should stop
+    expect(assembler.faulted).toBe(true);
+    
+    // Record output after faulting
+    const outputAfterFault = assembler.outputBuffer.iron_gear || 0;
+    
+    // Run more ticks
+    stepTicks(world, 90);
+    
+    // Output should not have increased since faulting
+    expect(assembler.outputBuffer.iron_gear || 0).toBe(outputAfterFault);
+  });
+
+  it("blockedTicks increments when output is full and triggers overload", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place miner facing a belt (so output can go somewhere initially)
+    const minerId = placeBuilding(world, 25, 25, "miner", "S");
+    
+    // Place a belt in front
+    const beltId = placeBuilding(world, 25, 26, "belt", "S");
+
+    const miner = world.buildings[minerId]!;
+    const belt = world.buildings[beltId]!;
+
+    // Set up deposit
+    world.tiles[25]![25]!.deposit = {
+      material: "iron_ore",
+      remaining: 1000,
+      initialAmount: 1000,
+    };
+
+    // Mine items - they go to belt
+    stepTicks(world, MINING_INTERVAL * 3);
+
+    // Now block the belt by filling it
+    belt.beltItems.push({ material: "iron_ore", movedAtTick: 0 });
+    belt.beltItems.push({ material: "iron_ore", movedAtTick: 0 });
+    belt.beltItems.push({ material: "iron_ore", movedAtTick: 0 }); // Full belt
+
+    // Mine more - miner's output can't go anywhere now
+    stepTicks(world, MINING_INTERVAL * 5);
+
+    // Miner's output buffer should have items and load should increase
+    expect(miner.outputBuffer.iron_ore || 0).toBeGreaterThan(0);
+    
+    // After many more ticks with continuous blocking, miner should fault
+    stepTicks(world, MINING_INTERVAL * 50);
+    
+    expect(miner.faulted).toBe(true);
+  });
+});
