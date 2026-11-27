@@ -33,6 +33,10 @@ describe("createReadToolHandlers", () => {
       expect(typeof tutorialProgress.completedSteps).toBe("number");
       expect(typeof tutorialProgress.totalStepsInPhase).toBe("number");
       expect(typeof tutorialProgress.isComplete).toBe("boolean");
+      
+      // Initial tutorial state: phase 1, currentStep not null
+      expect((tutorialProgress.phase as number)).toBe(1);
+      expect(tutorialProgress.currentStep).not.toBeNull();
     });
 
     it("includes tech tree status with all unlock fields", () => {
@@ -193,6 +197,40 @@ describe("createReadToolHandlers", () => {
       expect(copperPlateRecipe).toBeDefined();
       expect((ironPlateRecipe?.unlocked as boolean)).toBe(true);
       expect((copperPlateRecipe?.unlocked as boolean)).toBe(true);
+    });
+
+    it("marks basic recipes as unlocked and tech-gated recipes as locked", () => {
+      const result = handlers.list_recipes({}) as Array<Record<string, unknown>>;
+      
+      // Basic recipes should be unlocked by default
+      const ironPlateRecipe = result.find(r => r.id === "iron_plate");
+      const copperPlateRecipe = result.find(r => r.id === "copper_plate");
+      const ironGearRecipe = result.find(r => r.id === "iron_gear");
+      const copperWireRecipe = result.find(r => r.id === "copper_wire");
+      
+      expect(ironPlateRecipe).toBeDefined();
+      expect(copperPlateRecipe).toBeDefined();
+      expect(ironGearRecipe).toBeDefined();
+      expect(copperWireRecipe).toBeDefined();
+      expect((ironPlateRecipe?.unlocked as boolean)).toBe(true);
+      expect((copperPlateRecipe?.unlocked as boolean)).toBe(true);
+      expect((ironGearRecipe?.unlocked as boolean)).toBe(true);
+      expect((copperWireRecipe?.unlocked as boolean)).toBe(true);
+
+      // Tech-gated recipes should NOT be unlocked initially
+      const steelPlateRecipe = result.find(r => r.id === "steel_plate");
+      const circuitBoardRecipe = result.find(r => r.id === "circuit_board");
+      const microchipRecipe = result.find(r => r.id === "microchip");
+      const automationModuleRecipe = result.find(r => r.id === "automation_module");
+      
+      expect(steelPlateRecipe).toBeDefined();
+      expect(circuitBoardRecipe).toBeDefined();
+      expect(microchipRecipe).toBeDefined();
+      expect(automationModuleRecipe).toBeDefined();
+      expect((steelPlateRecipe?.unlocked as boolean)).toBe(false);
+      expect((circuitBoardRecipe?.unlocked as boolean)).toBe(false);
+      expect((microchipRecipe?.unlocked as boolean)).toBe(false);
+      expect((automationModuleRecipe?.unlocked as boolean)).toBe(false);
     });
 
     it("filters by unlocked status when onlyUnlocked is true", () => {
