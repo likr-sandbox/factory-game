@@ -17,7 +17,7 @@ export interface InputState {
   dragStartY: number | null;
 }
 
-type BuildingType = "miner" | "belt" | "splitter" | "smelter" | "assembler";
+type BuildingType = "miner" | "belt" | "splitter" | "filter_splitter" | "underground_belt" | "smelter" | "assembler" | "recycler" | "sensor";
 
 const initialState: InputState = {
   mode: "place",
@@ -68,7 +68,9 @@ export function handleTileClick(
     const recipe = state.selectedBuilding === "smelter" || state.selectedBuilding === "assembler"
       ? state.selectedRecipe ?? undefined
       : undefined;
-    const filter = state.selectedBuilding === "splitter" ? state.selectedFilter ?? undefined : undefined;
+    const filter = state.selectedBuilding === "splitter" || state.selectedBuilding === "filter_splitter"
+      ? state.selectedFilter ?? undefined
+      : undefined;
     return placeBuilding(world, {
       x, y,
       type: state.selectedBuilding,

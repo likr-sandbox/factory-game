@@ -13,6 +13,7 @@ import {
   rotateDirection,
   createInputState,
 } from "./input";
+import { UI_PALETTE } from "./palette";
 
 export const TILE_SIZE = 32;
 
@@ -29,6 +30,9 @@ export class FactoryScene extends Scene {
   // Explicit sprite tracking to prevent leaks
   private buildingSprites: Map<string, GameObjects.Sprite> = new Map();
   private itemSprites: Map<string, GameObjects.Sprite> = new Map();
+  // Status overlay tracking for faulted buildings and depleted deposits
+  private faultOverlays: Map<string, GameObjects.Graphics> = new Map();
+  private depletedOverlays: Map<string, GameObjects.Graphics> = new Map();
 
   constructor() {
     super("FactoryScene");
@@ -122,6 +126,18 @@ export class FactoryScene extends Scene {
     }
     this.itemSprites.clear();
 
+    // Destroy all tracked fault overlays
+    for (const overlay of this.faultOverlays.values()) {
+      overlay.destroy();
+    }
+    this.faultOverlays.clear();
+
+    // Destroy all tracked depleted overlays
+    for (const overlay of this.depletedOverlays.values()) {
+      overlay.destroy();
+    }
+    this.depletedOverlays.clear();
+
     // Sync building sprites with explicit tracking
     for (const building of Object.values(world.buildings)) {
       const frame = building.type === "belt" || building.type === "underground_belt" ? 0 : 0;
@@ -135,6 +151,30 @@ export class FactoryScene extends Scene {
       );
       sprite.setDepth(building.y);
       this.buildingSprites.set(building.id, sprite);
+
+      // Create fault overlay for faulted buildings
+      if (building.faulted) {
+        const faultOverlay = this.add.graphics();
+        faultOverlay.x = building.x * TILE_SIZE + TILE_SIZE / 2;
+        faultOverlay.y = building.y * TILE_SIZE + TILE_SIZE / 2;
+        faultOverlay.setDepth(building.y + 1); // Above building
+        
+        // Draw red warning indicator (exclamation mark shape)
+        const color = parseInt(UI_PALETTE.fault.hex.substring(1), 16);
+        faultOverlay.fillStyle(color, 1);
+        
+        // Draw a warning triangle/exclamation indicator
+        const size = 8;
+        const x = building.x * TILE_SIZE + TILE_SIZE / 2;
+        const y = building.y * TILE_SIZE;
+        
+        // Draw exclamation mark - top bar
+        faultOverlay.fillRect(x - size / 2, y - 4, size, 2);
+        // Draw exclamation mark - bottom dot
+        faultOverlay.fillCircle(x, y + 2, 2);
+        
+        this.faultOverlays.set(building.id, faultOverlay);
+      }
 
       // Track expected item keys for this building
       for (let i = 0; i < building.beltItems.length; i++) {
@@ -150,6 +190,40 @@ export class FactoryScene extends Scene {
         itemSprite.setDepth(building.y + 0.5);
         itemSprite.setName(spriteKey);
         this.itemSprites.set(spriteKey, itemSprite);
+      }
+    }
+
+    // Create depleted overlays for exhausted ore deposits
+    for (let y = 0; y < world.height; y++) {
+      for (let x = 0; x < world.width; x++) {
+        const tile = world.tiles[y]?.[x];
+        if (!tile || !tile.deposit) continue;
+
+        if (tile.deposit.remaining <= 0) {
+          const key = `depleted_${x}_${y}`;
+          const depletedOverlay = this.add.graphics();
+          depletedOverlay.x = x * TILE_SIZE + TILE_SIZE / 2;
+          depletedOverlay.y = y * TILE_SIZE + TILE_SIZE / 2;
+          depletedOverlay.setDepth(0.6); // Above deposit, below buildings
+
+          // Draw depleted indicator (red X mark)
+          const color = parseInt(UI_PALETTE.fault.hex.substring(1), 16);
+          depletedOverlay.lineStyle(2, color, 1);
+
+          // Draw X shape to indicate depleted
+          const size = 8;
+          const cx = x * TILE_SIZE + TILE_SIZE / 2;
+          const cy = y * TILE_SIZE + TILE_SIZE / 2;
+          
+          depletedOverlay.beginPath();
+          depletedOverlay.moveTo(cx - size / 2, cy - size / 2);
+          depletedOverlay.lineTo(cx + size / 2, cy + size / 2);
+          depletedOverlay.moveTo(cx + size / 2, cy - size / 2);
+          depletedOverlay.lineTo(cx - size / 2, cy + size / 2);
+          depletedOverlay.strokePath();
+
+          this.depletedOverlays.set(key, depletedOverlay);
+        }
       }
     }
   }

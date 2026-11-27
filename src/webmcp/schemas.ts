@@ -117,7 +117,7 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
         y: { type: "number", description: "Y coordinate where to place the building" },
         type: { type: "string", enum: ["miner", "belt", "splitter", "filter_splitter", "underground_belt", "smelter", "assembler", "recycler", "sensor", "hub"], description: "Type of building to place" },
         direction: { type: "string", enum: ["N", "E", "S", "W"], description: "Direction the building faces" },
-        recipeId: { type: "string", enum: ["iron_plate", "copper_plate", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module"], description: "Recipe ID for buildings that support recipes" },
+        recipeId: { type: "string", enum: ["iron_plate", "copper_plate", "iron_plate_high", "copper_plate_high", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module"], description: "Recipe ID for buildings that support recipes" },
         filterMaterial: { type: "string", enum: ["iron_ore", "copper_ore", "coal", "silica_sand", "iron_plate", "copper_plate", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module", "slag"], description: "Filter material for filter-capable buildings" },
       },
       required: ["x", "y", "type", "direction"],
@@ -166,7 +166,7 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
       properties: {
         x: { type: "number", description: "X coordinate of the target building" },
         y: { type: "number", description: "Y coordinate of the target building" },
-        recipeId: { type: "string", enum: ["iron_plate", "copper_plate", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module"], description: "Recipe ID to set" },
+        recipeId: { type: "string", enum: ["iron_plate", "copper_plate", "iron_plate_high", "copper_plate_high", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module"], description: "Recipe ID to set" },
         filterMaterial: { type: "string", enum: ["iron_ore", "copper_ore", "coal", "silica_sand", "iron_plate", "copper_plate", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module", "slag"], description: "Filter material to set" },
         repair: { type: "boolean", description: "Repair the building if it is faulted" },
       },
