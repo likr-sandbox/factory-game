@@ -44,6 +44,8 @@ export type BuildingType =
 export type RecipeId =
   | "iron_plate"
   | "copper_plate"
+  | "iron_plate_high"
+  | "copper_plate_high"
   | "iron_gear"
   | "copper_wire"
   | "steel_plate"
@@ -55,6 +57,22 @@ export type RecipeId =
 // ============================================================================
 // Core Data Structures
 // ============================================================================
+
+export interface ActiveQuestState {
+  questId: string;
+  stepIndex: number;
+  progress: Record<string, number>;
+  startedAtTick: number;
+}
+
+export interface TutorialStepDef {
+  id: string;
+  title: string;
+  description: string;
+  targetType: "place_building" | "collect_resource" | "deliver_item" | "research_tech";
+  targetValue?: string;
+  requiredAmount?: number;
+}
 
 export interface ResourceDeposit {
   material: MaterialId;
@@ -114,6 +132,16 @@ export interface WorldState {
   deliveryHistory: DeliveryRecord[];
   unlockedTechs: string[];
   completedQuests: string[];
+  // Progression fields
+  researchPoints?: number;
+  // Tutorial fields
+  tutorialPhase?: number;
+  completedTutorialSteps?: string[];
+  // Dynamic quest fields
+  activeQuests?: ActiveQuestState[];
+  nextQuestId?: number;
+  // SPM (Science Per Minute) tracking
+  spm?: Partial<Record<string, number>>;
 }
 
 // ============================================================================

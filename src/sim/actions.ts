@@ -6,6 +6,7 @@ import type { PlaceBuildingInput, PlaceBeltLineInput, RemoveAreaInput, SetRecipe
 import { BUILDING_CATALOG } from "./catalog";
 import { RECIPE_CATALOG } from "./catalog";
 import { inBounds, getTile, isHubTile, directionDelta, oppositeDirection } from "./world";
+import { isBuildingUnlocked, isRecipeUnlocked, unlockTech, type TechId } from "./progression";
 
 // ============================================================================
 // placeBuilding
@@ -39,6 +40,11 @@ export function placeBuilding(
     return { success: false, error: { code: "HUB_PROTECTED", message: `Cannot place on hub tile`, details: { x, y } } };
   }
 
+  // Check if building type is unlocked
+  if (!isBuildingUnlocked(world, type)) {
+    return { success: false, error: { code: "TECH_LOCKED", message: `Building type ${type} is not unlocked`, details: { x, y, type } } };
+  }
+
   // Miner must be placed on deposit with remaining > 0
   if (type === "miner") {
     if (!tile.deposit || tile.deposit.remaining <= 0) {
@@ -57,6 +63,11 @@ export function placeBuilding(
     if (recipe && recipe.building !== type) {
       return { success: false, error: { code: "INVALID_RECIPE", message: `Recipe ${recipeId} is for ${recipe.building}, not ${type}`, details: { x, y, recipeId, type } } };
     }
+  }
+
+  // Check if recipe is unlocked (for smelter/assembler)
+  if (recipeId && !isRecipeUnlocked(world, recipeId)) {
+    return { success: false, error: { code: "TECH_LOCKED", message: `Recipe ${recipeId} is not unlocked`, details: { x, y, recipeId } } };
   }
 
   // Create building state
@@ -298,6 +309,8 @@ export function setRecipe(
       building.faulted = false;
       changes.repaired = true;
     }
+    building.blockedTicks = 0;
+    building.load = 0;
   }
 
   // Handle recipeId (smelter/assembler only)
@@ -313,6 +326,11 @@ export function setRecipe(
 
     if (recipe.building !== building.type) {
       return { success: false, error: { code: "INVALID_RECIPE", message: `Recipe ${recipeId} is for ${recipe.building}, not ${building.type}`, details: { recipeId, buildingType: building.type } } };
+    }
+
+    // Check if recipe is unlocked
+    if (!isRecipeUnlocked(world, recipeId)) {
+      return { success: false, error: { code: "TECH_LOCKED", message: `Recipe ${recipeId} is not unlocked`, details: { x, y, recipeId } } };
     }
 
     building.recipeId = recipeId;
@@ -406,3 +424,30 @@ export function batchActions(
 
   return { success: true, worldTick: world.tick };
 }
+
+// ============================================================================
+// unlockTechAction
+// ============================================================================
+
+export function unlockTechAction(
+  world: WorldState,
+  techId: TechId
+): ActionResult {
+  const validTechIds: TechId[] = [
+    "underground_belt", "filter_splitter", "high_efficiency",
+    "sensor", "recycler", "advanced_smelting", "electronics", "automation"
+  ];
+  
+  if (!validTechIds.includes(techId)) {
+    return { success: false, error: { code: "INVALID_TECH", message: `Unknown tech ID: ${techId}`, details: { techId } } };
+  }
+
+  const unlocked = unlockTech(world, techId);
+  
+  if (!unlocked) {
+    return { success: false, error: { code: "INSUFFICIENT_POINTS", message: `Insufficient research points to unlock ${techId}`, details: { techId } } };
+  }
+
+  return { success: true, worldTick: world.tick, changes: { unlockedTech: techId } };
+}
+

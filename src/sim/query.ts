@@ -4,6 +4,9 @@
 import type { WorldState, MaterialId, RecipeId } from "./types";
 import { RECIPE_CATALOG, TECH_CATALOG } from "./catalog";
 import { HUB_ORIGIN } from "./world";
+import { collectSensorAlerts } from "./reliability";
+import { isRecipeUnlocked, getTechTreeStatus, getTutorialProgress } from "./progression";
+import { getActiveQuests } from "./quests";
 
 // ============================================================================
 // Query Function Results
@@ -22,6 +25,10 @@ export interface FactorySummary {
   depletedMinerCount: number;
   unlockedTechs: string[];
   completedQuests: string[];
+  researchPoints: number;
+  techTree: ReturnType<typeof getTechTreeStatus>;
+  tutorialProgress: ReturnType<typeof getTutorialProgress>;
+  activeQuests: ReturnType<typeof getActiveQuests>;
 }
 
 export interface TileEntry {
@@ -81,6 +88,7 @@ export interface Metrics {
   deliveriesPerMinute: Partial<Record<MaterialId, number>>;
   bottlenecks: BottleneckCandidate[];
   alerts: Alert[];
+  researchPoints: number;
 }
 
 // ============================================================================
@@ -122,6 +130,10 @@ export function getFactorySummary(world: WorldState): FactorySummary {
     depletedMinerCount,
     unlockedTechs: [...world.unlockedTechs],
     completedQuests: [...world.completedQuests],
+    researchPoints: world.researchPoints ?? 0,
+    techTree: getTechTreeStatus(world),
+    tutorialProgress: getTutorialProgress(world),
+    activeQuests: getActiveQuests(world),
   };
 }
 
@@ -243,11 +255,8 @@ export function listRecipes(
   for (const [id, recipe] of Object.entries(RECIPE_CATALOG)) {
     const recipeId = id as RecipeId;
     
-    // Check if recipe is unlocked by default or via a tech
-    const unlocked = recipe.unlockedByDefault || world.unlockedTechs.some(techId => {
-      const tech = TECH_CATALOG[techId];
-      return tech?.unlocks.includes(recipeId);
-    });
+    // Check if recipe is unlocked using progression module
+    const unlocked = isRecipeUnlocked(world, recipeId);
 
     if (onlyUnlocked && !unlocked) continue;
 
@@ -310,9 +319,22 @@ export function getMetrics(
   // Generate alerts
   const alerts: Alert[] = [];
 
+  // Collect sensor alerts from reliability module
+  const sensorAlerts = collectSensorAlerts(world);
+  for (const sensorAlert of sensorAlerts) {
+    alerts.push({
+      type: sensorAlert.alertType === "jam" ? "faulted" : sensorAlert.alertType === "depleted" ? "depleted" : "faulted",
+      buildingId: sensorAlert.buildingId,
+      x: world.buildings[sensorAlert.buildingId]?.x || 0,
+      y: world.buildings[sensorAlert.buildingId]?.y || 0,
+      message: sensorAlert.message,
+    });
+  }
+
+  // Also add faulted and depleted alerts from non-sensor buildings
   // Faulted buildings
   for (const building of Object.values(world.buildings)) {
-    if (building.faulted) {
+    if (building.faulted && !sensorAlerts.some(sa => sa.buildingId === building.id)) {
       alerts.push({
         type: "faulted",
         buildingId: building.id,
@@ -328,13 +350,15 @@ export function getMetrics(
     if (building.type === "miner") {
       const tile = world.tiles[building.y]?.[building.x];
       if (tile?.deposit && tile.deposit.remaining <= 0) {
-        alerts.push({
-          type: "depleted",
-          buildingId: building.id,
-          x: building.x,
-          y: building.y,
-          message: `Miner ${building.id} has depleted its resource`,
-        });
+        if (!sensorAlerts.some(sa => sa.buildingId === building.id)) {
+          alerts.push({
+            type: "depleted",
+            buildingId: building.id,
+            x: building.x,
+            y: building.y,
+            message: `Miner ${building.id} has depleted its resource`,
+          });
+        }
       }
     }
   }
@@ -344,5 +368,6 @@ export function getMetrics(
     deliveriesPerMinute: deliveriesByMaterial,
     bottlenecks,
     alerts,
+    researchPoints: world.researchPoints ?? 0,
   };
 }

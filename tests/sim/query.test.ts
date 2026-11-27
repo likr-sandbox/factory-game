@@ -19,6 +19,15 @@ describe("Query Functions", () => {
       expect(summary.delivered).toEqual({});
       expect(summary.unlockedTechs).toEqual([]);
       expect(summary.completedQuests).toEqual([]);
+      expect(summary.researchPoints).toBe(0);
+      expect(summary.techTree).toBeDefined();
+      expect(summary.techTree.undergroundBelt).toBe(true);
+      expect(summary.techTree.sensor).toBe(true);
+      expect(summary.techTree.recycler).toBe(true);
+      expect(summary.techTree.electronics.assembler).toBe(false);
+      expect(summary.tutorialProgress).toBeDefined();
+      expect(summary.tutorialProgress.phase).toBe(0);
+      expect(summary.activeQuests).toEqual([]);
     });
 
     it("counts buildings and tracks deliveries after actions", () => {
@@ -199,6 +208,7 @@ describe("Query Functions", () => {
       expect(metrics.deliveriesPerMinute).toBeDefined();
       expect(Array.isArray(metrics.bottlenecks)).toBe(true);
       expect(Array.isArray(metrics.alerts)).toBe(true);
+      expect(metrics.researchPoints).toBe(0);
     });
 
     it("tracks delivery rates per material", () => {
