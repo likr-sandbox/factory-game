@@ -84,13 +84,13 @@ describe("Building Catalog", () => {
 
 describe("Recipe Catalog", () => {
   const recipeIds: RecipeId[] = [
-    "iron_plate", "copper_plate", "iron_gear", "copper_wire",
-    "steel_plate", "silicon_wafer", "circuit_board", "microchip",
-    "automation_module",
+    "iron_plate", "copper_plate", "iron_plate_high", "copper_plate_high",
+    "iron_gear", "copper_wire", "steel_plate", "silicon_wafer",
+    "circuit_board", "microchip", "automation_module",
   ];
 
-  it("should have all 9 recipes", () => {
-    expect(Object.keys(RECIPE_CATALOG).length).toBe(9);
+  it("should have all 11 recipes", () => {
+    expect(Object.keys(RECIPE_CATALOG).length).toBe(11);
     for (const id of recipeIds) {
       expect(RECIPE_CATALOG[id]).toBeDefined();
     }
@@ -155,6 +155,31 @@ describe("Recipe Catalog", () => {
     expect(RECIPE_CATALOG.iron_plate.building).toBe("smelter");
     expect(RECIPE_CATALOG.iron_gear.building).toBe("assembler");
     expect(RECIPE_CATALOG.copper_wire.building).toBe("assembler");
+  });
+
+  it("should have slagChance on high-efficiency recipes", () => {
+    expect(RECIPE_CATALOG.iron_plate_high.slagChance).toBe(0.15);
+    expect(RECIPE_CATALOG.copper_plate_high.slagChance).toBe(0.15);
+  });
+
+  it("should have slagChance on advanced smelting recipes", () => {
+    expect(RECIPE_CATALOG.steel_plate.slagChance).toBe(0.25);
+    expect(RECIPE_CATALOG.silicon_wafer.slagChance).toBe(0.20);
+  });
+
+  it("should not have slagChance on basic recipes", () => {
+    expect(RECIPE_CATALOG.iron_plate.slagChance).toBeUndefined();
+    expect(RECIPE_CATALOG.copper_plate.slagChance).toBeUndefined();
+    expect(RECIPE_CATALOG.iron_gear.slagChance).toBeUndefined();
+  });
+
+  it("should have higher output ratio for high-efficiency recipes", () => {
+    // iron_plate_high: 3 iron_ore -> 2 iron_plate (better than 2->1)
+    expect(RECIPE_CATALOG.iron_plate_high.inputs.iron_ore).toBe(3);
+    expect(RECIPE_CATALOG.iron_plate_high.outputs.iron_plate).toBe(2);
+    // copper_plate_high: 3 copper_ore -> 2 copper_plate
+    expect(RECIPE_CATALOG.copper_plate_high.inputs.copper_ore).toBe(3);
+    expect(RECIPE_CATALOG.copper_plate_high.outputs.copper_plate).toBe(2);
   });
 });
 

@@ -4,7 +4,7 @@ import type { InputState } from "../game/input";
 import type { InspectorHandle } from "./inspector";
 
 export interface PaletteBarOptions {
-  onBuildingSelect: (building: "miner" | "belt" | "splitter" | "smelter" | "assembler") => void;
+  onBuildingSelect: (building: "miner" | "belt" | "splitter" | "filter_splitter" | "underground_belt" | "smelter" | "assembler" | "recycler" | "sensor") => void;
   onRotate: () => void;
   onDemolish: () => void;
   onInspectToggle: () => void;
@@ -17,7 +17,8 @@ export interface PaletteBarHandle {
 
 const BUILDING_LABELS: Record<string, string> = {
   miner: "採掘機", belt: "コンベア", splitter: "分配器",
-  smelter: "精錬炉", assembler: "組立機",
+  filter_splitter: "フィルター分配機", underground_belt: "交差ブリッジ",
+  smelter: "精錬炉", assembler: "組立機", recycler: "不純物処理炉", sensor: "センサー",
 };
 
 const ACTION_LABELS = {
@@ -37,7 +38,7 @@ export function mountPaletteBar(container: HTMLElement, options: PaletteBarOptio
   wrapper.appendChild(buildingGroup);
 
   const buildingButtons: Record<string, HTMLButtonElement> = {};
-  const buildingTypes: Array<"miner" | "belt" | "splitter" | "smelter" | "assembler"> = ["miner", "belt", "splitter", "smelter", "assembler"];
+  const buildingTypes: Array<"miner" | "belt" | "splitter" | "filter_splitter" | "underground_belt" | "smelter" | "assembler" | "recycler" | "sensor"> = ["miner", "belt", "splitter", "filter_splitter", "underground_belt", "smelter", "assembler", "recycler", "sensor"];
 
   for (const type of buildingTypes) {
     const btn = doc.createElement("button");

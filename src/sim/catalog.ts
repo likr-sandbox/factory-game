@@ -89,6 +89,26 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     craftTicks: 60,
     unlockedByDefault: true,
   },
+  iron_plate_high: {
+    id: "iron_plate_high",
+    nameJa: "鉄板製造（高効率）",
+    building: "smelter",
+    inputs: { iron_ore: 3 },
+    outputs: { iron_plate: 2 },
+    craftTicks: 90,
+    unlockedByDefault: false,
+    slagChance: 0.15,
+  },
+  copper_plate_high: {
+    id: "copper_plate_high",
+    nameJa: "銅板製造（高効率）",
+    building: "smelter",
+    inputs: { copper_ore: 3 },
+    outputs: { copper_plate: 2 },
+    craftTicks: 90,
+    unlockedByDefault: false,
+    slagChance: 0.15,
+  },
   iron_gear: {
     id: "iron_gear",
     nameJa: "鉄歯車製造",
@@ -115,6 +135,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     outputs: { steel_plate: 1 },
     craftTicks: 120,
     unlockedByDefault: false,
+    slagChance: 0.25,
   },
   silicon_wafer: {
     id: "silicon_wafer",
@@ -124,6 +145,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     outputs: { silicon_wafer: 1 },
     craftTicks: 120,
     unlockedByDefault: false,
+    slagChance: 0.20,
   },
   circuit_board: {
     id: "circuit_board",
