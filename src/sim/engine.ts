@@ -4,7 +4,7 @@
 import type { WorldState, BuildingState, Tile, Direction, MaterialId, RecipeId } from "./types";
 import { RECIPE_CATALOG } from "./catalog";
 import { directionDelta, oppositeDirection, inBounds, nextRandom } from "./world";
-import { processFilterSplitters, processRecyclers } from "./reliability";
+import { processFilterSplitters, processRecyclers, processUndergroundBelts, updateReliabilityAndOverload } from "./reliability";
 
 const MINING_INTERVAL = 60; // ticks between mining operations
 const MAX_OUTPUT_BUFFER = 10; // max items in output buffer
@@ -464,6 +464,12 @@ export function stepTick(world: WorldState): void {
 
   // 8. Process recyclers
   processRecyclers(world);
+
+  // 9. Process underground belts
+  processUndergroundBelts(world);
+
+  // 10. Update reliability and overload
+  updateReliabilityAndOverload(world);
 }
 
 /**
