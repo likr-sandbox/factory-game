@@ -35,16 +35,18 @@ html, body {
 /* Game Container - Full viewport canvas area */
 #game-container {
   flex: 1;
-  width: 100%;
-  position: relative;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   background-color: var(--bg-medium);
 }
 
 #game-container canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   image-rendering: -moz-crisp-edges;
@@ -53,42 +55,78 @@ html, body {
 /* Top HUD Bar */
 #hud-container {
   width: 100%;
-  height: 48px;
-  min-height: 48px;
+  height: auto;
+  min-height: 40px;
   background-color: var(--panel-bg);
   border-top: 2px solid var(--border-color);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 0 16px;
-  gap: 16px;
+  padding: 6px 12px;
+  gap: 6px;
   overflow: visible;
 }
 
 .hud-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px 8px;
   background-color: var(--bg-light);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
 }
 
 /* Bottom Palette/Inspector Bar */
 #palette-container {
   width: 100%;
-  height: 80px;
-  min-height: 80px;
+  height: auto;
+  min-height: 52px;
   background-color: var(--panel-bg);
   border-top: 2px solid var(--border-color);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 8px 16px;
-  gap: 12px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  justify-content: space-between;
+  padding: 6px 12px;
+  gap: 8px;
+  overflow: visible;
+}
+
+#inspector-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspector-panel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background-color: var(--bg-light);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.direction-indicator {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.palette-feedback {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.palette-btn.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .palette-item {
@@ -186,9 +224,12 @@ html, body {
 .webmcp-panel {
   width: 100%;
   max-width: 600px;
+  max-height: 190px;
   background-color: var(--panel-bg);
   border: 2px solid var(--border-color);
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -199,6 +240,7 @@ html, body {
   padding: 12px 16px;
   background-color: var(--bg-light);
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .webmcp-panel-title {
@@ -224,10 +266,13 @@ html, body {
 }
 
 .webmcp-panel-content {
+  flex: 1;
+  min-height: 0;
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .webmcp-panel-status {
@@ -243,7 +288,9 @@ html, body {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 200px;
+  flex: 1;
+  min-height: 0;
+  max-height: 100px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

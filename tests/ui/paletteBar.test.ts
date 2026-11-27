@@ -13,14 +13,22 @@ class MockElement {
   public parentNode: MockElement | null = null;
   public ownerDocument: MockDocument | null = null;
   public dataset: Record<string, string> = {};
+  public disabled: boolean = false;
+  public title: string = "";
+  public value: string = "";
   private classListArr: string[] = [];
+  private _classList: { add(...cls: string[]): void; remove(...cls: string[]): void; toggle(cls: string, force?: boolean): void };
 
-  get classList(): { add(...cls: string[]): void; remove(...cls: string[]): void; toggle(cls: string, force?: boolean): void } {
-    return {
+  constructor() {
+    this._classList = {
       add: (...cls) => { cls.forEach(c => { if (!this.classListArr.includes(c)) this.classListArr.push(c); }); },
       remove: (...cls) => { cls.forEach(c => { const i = this.classListArr.indexOf(c); if (i !== -1) this.classListArr.splice(i, 1); }); },
       toggle: (c, force) => { if (force !== undefined) force ? !this.classListArr.includes(c) && this.classListArr.push(c) : this.classListArr.splice(this.classListArr.indexOf(c), 1); else { const i = this.classListArr.indexOf(c); i === -1 ? this.classListArr.push(c) : this.classListArr.splice(i, 1); } },
     };
+  }
+
+  get classList(): { add(...cls: string[]): void; remove(...cls: string[]): void; toggle(cls: string, force?: boolean): void } {
+    return this._classList;
   }
   get className(): string { return this.classListArr.join(" "); }
   set className(v: string) { this.classListArr = v.trim() ? v.split(/\s+/) : []; }
@@ -43,6 +51,7 @@ class MockElement {
       else if (sel.startsWith(".") && el.className.includes(sel.slice(1))) res.push(el);
       for (const c of el.children) checkMatch(c);
     };
+    // Start from this element's children, not including self
     for (const c of this.children) checkMatch(c);
     return res;
   }
@@ -52,7 +61,12 @@ class MockElement {
 }
 
 class MockDocument {
-  createElement(tag: string): MockElement { const el = new MockElement(); el.ownerDocument = this; el.tagName = tag.toUpperCase(); return el; }
+  createElement(tag: string): MockElement { 
+    const el = new MockElement(); 
+    el.ownerDocument = this; 
+    el.tagName = tag.toUpperCase(); 
+    return el; 
+  }
 }
 
 describe("mountPaletteBar", () => {
@@ -90,12 +104,16 @@ describe("mountPaletteBar", () => {
     const inputState = createInputState();
     const handle = mountPaletteBar(container as unknown as HTMLElement, { onBuildingSelect: vi.fn(), onRotate: vi.fn(), onDemolish: vi.fn(), onInspectToggle: vi.fn() });
     handle.sync(createWorld(42), inputState);
-    const allBtns = container.querySelectorAll("button");
-    const beltBtn = Array.from(allBtns).find(b => b.textContent === "コンベア") as MockElement;
-    expect(beltBtn!.className).toContain("selected");
+    // Access belt button directly via buildingGroup (wrapper.children[0])
+    const wrapper = container.children[0]!;
+    const buildingGroup = wrapper.children[0]!;
+    const beltBtn = buildingGroup.children[1] as MockElement; // Second button is "コンベア"
+    // Check that belt button has selected styling (borderColor set to #e94560)
+    expect(beltBtn.style.borderColor).toBe("#e94560");
     inputState.mode = "inspect"; inputState.selectedBuilding = null;
     handle.sync(createWorld(42), inputState);
-    const inspectBtn = Array.from(allBtns).find(b => b.textContent === "調査") as MockElement;
+    const actionGroup = wrapper.children[1]!;
+    const inspectBtn = Array.from(actionGroup.children).find(b => b.textContent === "調査") as MockElement;
     expect(inspectBtn!.className).toContain("selected");
     handle.destroy();
   });
@@ -105,6 +123,76 @@ describe("mountPaletteBar", () => {
     expect(container.children.length).toBe(1);
     handle.destroy();
     expect(container.children.length).toBe(0);
+  });
+
+  it("updates direction indicator with N/E/S/W via sync()", () => {
+    const inputState = createInputState();
+    const handle = mountPaletteBar(container as unknown as HTMLElement, { onBuildingSelect: vi.fn(), onRotate: vi.fn(), onDemolish: vi.fn(), onInspectToggle: vi.fn() });
+    
+    // Call sync to initialize direction indicator
+    handle.sync(createWorld(42), inputState);
+    
+    // Check initial direction (default is E)
+    const wrapper = container.children[0]!;
+    const actionGroup = wrapper.children[1]!;
+    const directionIndicator = Array.from(actionGroup.children).find(c => c.className.includes("direction-indicator")) as MockElement;
+    expect(directionIndicator!.textContent).toContain("向き：E");
+    
+    // Update to different directions
+    inputState.direction = "N";
+    handle.sync(createWorld(42), inputState);
+    expect(directionIndicator!.textContent).toContain("向き：N");
+    
+    inputState.direction = "S";
+    handle.sync(createWorld(42), inputState);
+    expect(directionIndicator!.textContent).toContain("向き：S");
+    
+    inputState.direction = "W";
+    handle.sync(createWorld(42), inputState);
+    expect(directionIndicator!.textContent).toContain("向き：W");
+    
+    handle.destroy();
+  });
+
+  it("disables locked building buttons with opacity and tooltip", () => {
+    const world = createWorld(42);
+    // Only unlock underground_belt tech, so filter_splitter, sensor, recycler remain locked
+    world.unlockedTechs = ["underground_belt"];
+    
+    const handle = mountPaletteBar(container as unknown as HTMLElement, { onBuildingSelect: vi.fn(), onRotate: vi.fn(), onDemolish: vi.fn(), onInspectToggle: vi.fn() });
+    handle.sync(world, createInputState());
+    
+    const allBtns = container.querySelectorAll("button");
+    const sensorBtn = Array.from(allBtns).find(b => b.textContent === "センサー") as MockElement;
+    const recyclerBtn = Array.from(allBtns).find(b => b.textContent === "不純物処理炉") as MockElement;
+    
+    // Locked buttons should be disabled with dimmed style
+    expect(sensorBtn!.disabled).toBe(true);
+    expect(sensorBtn!.style.opacity).toBe("0.5");
+    expect(sensorBtn!.title).toBe("未解放（テック研究が必要）");
+    expect(sensorBtn!.className).toContain("locked");
+    
+    expect(recyclerBtn!.disabled).toBe(true);
+    expect(recyclerBtn!.style.opacity).toBe("0.5");
+    
+    handle.destroy();
+  });
+
+  it("setFeedback displays and clears feedback messages", () => {
+    const handle = mountPaletteBar(container as unknown as HTMLElement, { onBuildingSelect: vi.fn(), onRotate: vi.fn(), onDemolish: vi.fn(), onInspectToggle: vi.fn() });
+    
+    const wrapper = container.children[0]!;
+    const feedbackElement = Array.from(wrapper.children).find(c => c.className.includes("palette-feedback")) as MockElement;
+    
+    // Set feedback message
+    handle.setFeedback("鉱床外");
+    expect(feedbackElement!.textContent).toBe("鉱床外");
+    
+    // Clear feedback
+    handle.setFeedback(null);
+    expect(feedbackElement!.textContent).toBe("");
+    
+    handle.destroy();
   });
 });
 
@@ -124,6 +212,58 @@ describe("createInspector", () => {
     expect(repairBtn!.style.display).toBe("block");
     const recipeSel = panel.children.find(c => c.tagName === "SELECT") as MockElement;
     expect(recipeSel).toBeDefined();
+    handle.destroy();
+  });
+
+  it("displays building name with coordinates and fault status", () => {
+    const onRepair = vi.fn(), onSetRecipe = vi.fn();
+    const handle = createInspector(container as unknown as HTMLElement, { onRepair, onSetRecipe });
+    const world = createWorld(42);
+    // Set building at (10, 20) - ensure tile exists and building is linked
+    world.tiles[20]![10]!.buildingId = "assembler1";
+    world.buildings["assembler1"] = { id: "assembler1", type: "assembler", x: 10, y: 20, direction: "E", inputBuffer: {}, outputBuffer: {}, beltItems: [], craftProgress: 0, roundRobinIndex: 0, faulted: false, load: 0, idleTicks: 0, blockedTicks: 0, recipeId: "copper_wire" };
+    handle.update(world, { x: 10, y: 20 });
+    const panel = container.children[0]!;
+    const infoDiv = panel.children[0]!;
+    expect(infoDiv.textContent).toContain("組立機 (10, 20)");
+    handle.destroy();
+  });
+
+  it("calls onRepair callback when repair button clicked", () => {
+    const onRepair = vi.fn(), onSetRecipe = vi.fn();
+    const handle = createInspector(container as unknown as HTMLElement, { onRepair, onSetRecipe });
+    const world = createWorld(42);
+    world.tiles[5]![5]!.buildingId = "smelter1";
+    world.buildings["smelter1"] = { id: "smelter1", type: "smelter", x: 5, y: 5, direction: "N", inputBuffer: {}, outputBuffer: {}, beltItems: [], craftProgress: 0, roundRobinIndex: 0, faulted: true, load: 0, idleTicks: 0, blockedTicks: 0, recipeId: "iron_plate" };
+    handle.update(world, { x: 5, y: 5 });
+    const panel = container.children[0]!;
+    const repairBtn = panel.children.find(c => c.textContent === "修理") as MockElement;
+    repairBtn!.dispatchEvent("click");
+    expect(onRepair).toHaveBeenCalledWith(5, 5);
+    handle.destroy();
+  });
+
+  it("calls onSetRecipe callback when recipe selected", () => {
+    const onRepair = vi.fn(), onSetRecipe = vi.fn();
+    const handle = createInspector(container as unknown as HTMLElement, { onRepair, onSetRecipe });
+    const world = createWorld(42);
+    world.tiles[12]![8]!.buildingId = "smelter1";
+    world.buildings["smelter1"] = { id: "smelter1", type: "smelter", x: 8, y: 12, direction: "N", inputBuffer: {}, outputBuffer: {}, beltItems: [], craftProgress: 0, roundRobinIndex: 0, faulted: false, load: 0, idleTicks: 0, blockedTicks: 0, recipeId: "iron_plate" };
+    handle.update(world, { x: 8, y: 12 });
+    const panel = container.children[0]!;
+    const recipeSelect = panel.children.find(c => c.tagName === "SELECT") as MockElement;
+    // Find an existing recipe option from the populated select
+    const options = recipeSelect.querySelectorAll("option");
+    if (options.length > 1) {
+      // Use second option (first is blank)
+      const selOption = options[1]!;
+      recipeSelect.value = (selOption as unknown as Record<string, string>).value || "copper_wire";
+    } else {
+      recipeSelect.value = "copper_wire";
+    }
+    const handler = (recipeSelect as unknown as Record<string, (e: unknown) => void | undefined>).onchange;
+    if (handler) handler({ target: recipeSelect });
+    expect(onSetRecipe).toHaveBeenCalledWith(8, 12, recipeSelect.value);
     handle.destroy();
   });
 

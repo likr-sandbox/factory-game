@@ -39,6 +39,7 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   // Create HUD elements
   const hudEl = doc.createElement("div");
   hudEl.className = "hud-bar";
+  hudEl.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%";
 
   // SPM display
   const spmEl = doc.createElement("span");
@@ -95,6 +96,9 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   speedControlsEl.appendChild(speed2Btn);
   speedControlsEl.appendChild(speed4Btn);
 
+  // Initialize 1x button as active (default speed)
+  speed1Btn.classList.add("active");
+
   // Active/Faulted building counts
   const countEl = doc.createElement("span");
   countEl.className = "hud-item building-counts";
@@ -118,6 +122,7 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   // Tech tree unlock buttons container
   const techTreeEl = doc.createElement("span");
   techTreeEl.className = "hud-item tech-tree";
+  techTreeEl.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;align-items:center";
 
   // Active quests display
   const questsEl = doc.createElement("span");
