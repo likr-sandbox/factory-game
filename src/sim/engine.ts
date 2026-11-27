@@ -5,7 +5,7 @@ import type { WorldState, BuildingState, Tile, Direction, MaterialId, RecipeId }
 import { RECIPE_CATALOG } from "./catalog";
 import { directionDelta, oppositeDirection, inBounds, nextRandom } from "./world";
 import { processFilterSplitters, processRecyclers, processUndergroundBelts, updateReliabilityAndOverload } from "./reliability";
-import { awardResearchPoints, getCurrentTutorialStep, completeTutorialStep } from "./progression";
+import { awardResearchPoints, getCurrentTutorialStep, completeTutorialStep, getTutorialStepsForPhase, type TutorialPhase } from "./progression";
 import { updateQuestProgress, processQuests } from "./quests";
 import { updateSpmStats } from "./stats";
 
@@ -488,9 +488,12 @@ export function stepTick(world: WorldState): void {
 
   // 13. Auto-advance completed tutorial steps when tutorialPhase > 0
   if ((world.tutorialPhase ?? 0) > 0) {
-    const currentStep = getCurrentTutorialStep(world);
-    if (currentStep) {
-      completeTutorialStep(world, currentStep.id);
+    const phase = world.tutorialPhase as TutorialPhase;
+    const completedSet = new Set(world.completedTutorialSteps || []);
+    for (const step of getTutorialStepsForPhase(phase)) {
+      if (!completedSet.has(step.id) && step.check(world)) {
+        completeTutorialStep(world, step.id);
+      }
     }
   }
 }
