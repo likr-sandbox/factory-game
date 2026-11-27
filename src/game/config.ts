@@ -26,6 +26,10 @@ export function createPhaserConfig(
     antialias: false,
     backgroundColor: "#1a1a2e",
     scene: sceneInstance ?? [FactoryScene],
+    render: {
+      powerPreference: "high-performance",
+      preserveDrawingBuffer: false,
+    },
     physics: {
       default: "arcade",
       arcade: {
