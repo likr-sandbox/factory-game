@@ -24,6 +24,72 @@ describe("createReadToolHandlers", () => {
       expect(Array.isArray(summary.completedQuests)).toBe(true);
     });
 
+    it("includes tutorial progress fields", () => {
+      const result = handlers.get_factory_summary({}) as Record<string, unknown>;
+      
+      expect(result.tutorialProgress).toBeDefined();
+      const tutorialProgress = result.tutorialProgress as Record<string, unknown>;
+      expect(typeof tutorialProgress.phase).toBe("number");
+      expect(typeof tutorialProgress.completedSteps).toBe("number");
+      expect(typeof tutorialProgress.totalStepsInPhase).toBe("number");
+      expect(typeof tutorialProgress.isComplete).toBe("boolean");
+    });
+
+    it("includes tech tree status with all unlock fields", () => {
+      const result = handlers.get_factory_summary({}) as Record<string, unknown>;
+      
+      expect(result.techTree).toBeDefined();
+      const techTree = result.techTree as Record<string, unknown>;
+      
+      // Check basic tech unlocks
+      expect(typeof techTree.undergroundBelt).toBe("boolean");
+      expect(typeof techTree.filterSplitter).toBe("boolean");
+      expect(typeof techTree.sensor).toBe("boolean");
+      expect(typeof techTree.recycler).toBe("boolean");
+      
+      // Check nested structures
+      expect(techTree.highEfficiencyRecipes).toBeDefined();
+      const highEff = techTree.highEfficiencyRecipes as Record<string, unknown>;
+      expect(typeof highEff.ironPlateHigh).toBe("boolean");
+      expect(typeof highEff.copperPlateHigh).toBe("boolean");
+      
+      expect(techTree.advancedSmelting).toBeDefined();
+      const advSmelt = techTree.advancedSmelting as Record<string, unknown>;
+      expect(typeof advSmelt.steelPlate).toBe("boolean");
+      expect(typeof advSmelt.siliconWafer).toBe("boolean");
+      
+      expect(techTree.electronics).toBeDefined();
+      const electronics = techTree.electronics as Record<string, unknown>;
+      expect(typeof electronics.assembler).toBe("boolean");
+      expect(typeof electronics.circuitBoard).toBe("boolean");
+      expect(typeof electronics.microchip).toBe("boolean");
+      
+      expect(techTree.automation).toBeDefined();
+      const automation = techTree.automation as Record<string, unknown>;
+      expect(typeof automation.automationModule).toBe("boolean");
+    });
+
+    it("includes research points field", () => {
+      const result = handlers.get_factory_summary({}) as Record<string, unknown>;
+      
+      expect(typeof result.researchPoints).toBe("number");
+      expect((result.researchPoints as number)).toBeGreaterThanOrEqual(0);
+    });
+
+    it("includes active quests field", () => {
+      const result = handlers.get_factory_summary({}) as Record<string, unknown>;
+      
+      expect(result.activeQuests).toBeDefined();
+      expect(Array.isArray(result.activeQuests)).toBe(true);
+    });
+
+    it("includes SPM field", () => {
+      const result = handlers.get_factory_summary({}) as Record<string, unknown>;
+      
+      expect(typeof result.spm).toBe("number");
+      expect((result.spm as number)).toBeGreaterThanOrEqual(0);
+    });
+
     it("throws on non-object input", () => {
       expect(() => handlers.get_factory_summary(null as unknown as Record<string, unknown>)).toThrow();
       expect(() => handlers.get_factory_summary("invalid" as unknown as Record<string, unknown>)).toThrow();
@@ -108,14 +174,52 @@ describe("createReadToolHandlers", () => {
       }
     });
 
-    it("filters by unlocked status when specified", () => {
+    it("includes unlocked field for each recipe", () => {
+      const result = handlers.list_recipes({}) as Array<Record<string, unknown>>;
+      
+      for (const recipe of result) {
+        expect(typeof recipe.unlocked).toBe("boolean");
+      }
+    });
+
+    it("marks default recipes as unlocked", () => {
+      const result = handlers.list_recipes({}) as Array<Record<string, unknown>>;
+      
+      // iron_plate and copper_plate should be unlocked by default
+      const ironPlateRecipe = result.find(r => r.id === "iron_plate");
+      const copperPlateRecipe = result.find(r => r.id === "copper_plate");
+      
+      expect(ironPlateRecipe).toBeDefined();
+      expect(copperPlateRecipe).toBeDefined();
+      expect((ironPlateRecipe?.unlocked as boolean)).toBe(true);
+      expect((copperPlateRecipe?.unlocked as boolean)).toBe(true);
+    });
+
+    it("filters by unlocked status when onlyUnlocked is true", () => {
       const allRecipes = handlers.list_recipes({}) as Array<Record<string, unknown>>;
       const unlockedRecipes = handlers.list_recipes({ onlyUnlocked: true }) as Array<Record<string, unknown>>;
 
       expect(unlockedRecipes.length).toBeLessThanOrEqual(allRecipes.length);
+      
+      // All returned recipes should be unlocked
       for (const recipe of unlockedRecipes) {
         expect((recipe.unlocked as boolean)).toBe(true);
       }
+      
+      // Unlocked recipes should be a subset of all recipes
+      for (const unlocked of unlockedRecipes) {
+        const found = allRecipes.find(r => r.id === unlocked.id);
+        expect(found).toBeDefined();
+        expect((found?.unlocked as boolean)).toBe(true);
+      }
+    });
+
+    it("returns all recipes when onlyUnlocked is false or undefined", () => {
+      const allRecipes = handlers.list_recipes({}) as Array<Record<string, unknown>>;
+      const explicitAll = handlers.list_recipes({ onlyUnlocked: false }) as Array<Record<string, unknown>>;
+      
+      expect(allRecipes.length).toBe(explicitAll.length);
+      expect(allRecipes.length).toBeGreaterThan(0);
     });
   });
 
