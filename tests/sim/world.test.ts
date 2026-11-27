@@ -192,4 +192,46 @@ describe("World Generator", () => {
       expect(grass / total).toBeGreaterThan(0.5);
     });
   });
+
+  describe("Progression and Tutorial State", () => {
+    it("should initialize with zero research points", () => {
+      const world = createWorld(42);
+      expect(world.researchPoints).toBe(0);
+    });
+
+    it("should initialize tutorial phase at 0", () => {
+      const world = createWorld(42);
+      expect(world.tutorialPhase).toBe(0);
+    });
+
+    it("should initialize empty completed tutorial steps", () => {
+      const world = createWorld(42);
+      expect(world.completedTutorialSteps).toEqual([]);
+    });
+
+    it("should initialize empty active quests", () => {
+      const world = createWorld(42);
+      expect(world.activeQuests).toEqual([]);
+    });
+
+    it("should initialize nextQuestId at 0", () => {
+      const world = createWorld(42);
+      expect(world.nextQuestId).toBe(0);
+    });
+
+    it("should initialize empty SPM tracking", () => {
+      const world = createWorld(42);
+      expect(world.spm).toEqual({});
+    });
+
+    it("should be deterministic with same seed for all new fields", () => {
+      const w1 = createWorld(42), w2 = createWorld(42);
+      expect(w1.researchPoints).toBe(w2.researchPoints);
+      expect(w1.tutorialPhase).toBe(w2.tutorialPhase);
+      expect(w1.completedTutorialSteps).toEqual(w2.completedTutorialSteps);
+      expect(w1.activeQuests).toEqual(w2.activeQuests);
+      expect(w1.nextQuestId).toBe(w2.nextQuestId);
+      expect(w1.spm).toEqual(w2.spm);
+    });
+  });
 });

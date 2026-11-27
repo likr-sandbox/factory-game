@@ -337,5 +337,15 @@ export function createWorld(seed: number = 12345): WorldState {
     deliveryHistory: [],
     unlockedTechs: [],
     completedQuests: [],
+    // Progression fields
+    researchPoints: 0,
+    // Tutorial fields
+    tutorialPhase: 0,
+    completedTutorialSteps: [],
+    // Dynamic quest fields
+    activeQuests: [],
+    nextQuestId: 0,
+    // SPM (Science Per Minute) tracking
+    spm: {},
   };
 }
