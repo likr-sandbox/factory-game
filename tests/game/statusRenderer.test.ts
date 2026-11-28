@@ -8,15 +8,17 @@ class MockGraphics {
   positionX = 0;
   positionY = 0;
   destroyed = false;
+  depth = 0;
+  lastFillColor = 0;
+  lastFillAlpha = 1;
   clear() { this.cleared = true; }
   setAlpha(a: number) { this.alpha = a; }
   fillRect(x: number, y: number, w: number, h: number) {}
   fillCircle(x: number, y: number, r: number) {}
-  lineWidth(w: number) {}
-  lineColor(r: number, g: number, b: number, a?: number) {}
-  fillStyle(c: string, a?: number) {}
+  fillStyle(color: number, alpha?: number) { this.lastFillColor = color; this.lastFillAlpha = alpha ?? 1; }
   strokeRect(x: number, y: number, w: number, h: number) {}
   setPosition(x: number, y: number) { this.positionX = x; this.positionY = y; }
+  setDepth(d: number) { this.depth = d; }
   destroy() { this.destroyed = true; }
 }
 class MockScene {
@@ -69,8 +71,9 @@ describe("syncBuildingStatusOverlays", () => {
   it("creates overlays for buildings needing status rendering", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(true); expect(scene.graphicsObjects.length).toBe(1); });
   it("destroys overlays for buildings no longer needing status", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world1 = makeWorld(100); world1.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world1); const existing = overlays.get(b.id)!; syncBuildingStatusOverlays(scene, overlays, makeWorld(100)); expect(existing.destroyed).toBe(true); expect(overlays.has(b.id)).toBe(false); });
   it("positions overlay at building pixel coordinates", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", x: 2, y: 3, recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); const o = overlays.get(b.id)!; expect(o.positionX).toBe(80); expect(o.positionY).toBe(112); });
-  it("shows progress bar for active smelter", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(true); });
-  it("shows material color indicator for smelter with recipe", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(true); });
+  it("sets depth to building.y + 1 for overlay", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", x: 2, y: 3, recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); const o = overlays.get(b.id)!; expect(o.depth).toBe(4); });
+  it("shows progress bar for active smelter with numeric colors", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(true); const overlay = overlays.get(b.id)!; expect(Number.isInteger(overlay.lastFillColor)).toBe(true); });
+  it("shows material color indicator for smelter with recipe", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(true); const overlay = overlays.get(b.id)!; expect(overlay.lastFillColor).toBe(0xE8E8E8); });
   it("shows congestion indicator when blockedTicks >= 30", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "belt", blockedTicks: 35, faulted: false }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(true); });
   it("does not show congestion indicator when faulted", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "belt", blockedTicks: 35, faulted: true }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); expect(overlays.has(b.id)).toBe(false); });
   it("reuses existing overlay instead of creating new one", () => { const scene = new MockScene(); const overlays = new Map<string, MockGraphics>(); const b = makeBuilding({ type: "smelter", recipeId: "iron_plate", craftProgress: 30 }); const world = makeWorld(100); world.buildings[b.id] = b; syncBuildingStatusOverlays(scene, overlays, world); const first = overlays.get(b.id); syncBuildingStatusOverlays(scene, overlays, world); const second = overlays.get(b.id); expect(first).toBe(second); expect(scene.graphicsObjects.length).toBe(1); });
