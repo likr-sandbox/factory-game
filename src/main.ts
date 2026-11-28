@@ -129,15 +129,13 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   // Create inspector container within palette container (must be done before mountPaletteBar clears contents)
   const inspectorContainer = doc.createElement("div");
   inspectorContainer.id = "inspector-container";
-  // Use responsive flex styling: flex:0 1 auto allows shrinking, align-items/justify-content for proper layout
-  inspectorContainer.style.cssText = "flex:0 1 auto;display:flex;align-items:center;justify-content:flex-end;";
   paletteContainer.appendChild(inspectorContainer);
 
   // Create dedicated palette bar container inside paletteContainer
   // This prevents mountPaletteBar's innerHTML="" from detaching inspectorContainer
   const paletteBarContainer = doc.createElement("div");
-  // Use responsive flex styling: flex:1 1 600px allows growth/shrink, min-width:0 prevents overflow
-  paletteBarContainer.style.cssText = "flex:1 1 600px;min-width:0;display:flex;gap:8px;overflow-x:auto;";
+  // Use responsive flex styling: flex:1 1 auto allows growth/shrink without forcing wrapping, align-items/center for proper layout
+  paletteBarContainer.style.cssText = "flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;";
   paletteContainer.insertBefore(paletteBarContainer, inspectorContainer);
 
   // Create scene instance (shared between main loop and Phaser)
