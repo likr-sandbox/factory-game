@@ -199,9 +199,6 @@ export class FactoryScene extends Scene {
       }
 
       const sprite = this.add.sprite(posX, posY, key);
-      if (isHub) {
-        sprite.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2);
-      }
       sprite.setDepth(building.y);
       this.buildingSprites.set(building.id, sprite);
 

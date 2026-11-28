@@ -5,6 +5,49 @@ import { FactoryScene } from "../../src/game/FactoryScene";
 import { PlacementGhost } from "../../src/game/overlays";
 import { Scene } from "phaser";
 
+// Mock document.createElement for offscreen canvas usage
+vi.stubGlobal("document", {
+  createElement: vi.fn().mockReturnValue({
+    width: 32,
+    height: 32,
+    getContext: vi.fn().mockReturnValue({
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 1,
+      font: "",
+      fillRect: vi.fn(),
+      fillCircle: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      stroke: vi.fn(),
+      fill: vi.fn(),
+      arc: vi.fn(),
+      rect: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      bezierCurveTo: vi.fn(),
+      ellipse: vi.fn(),
+      strokeRect: vi.fn(),
+      fillText: vi.fn(),
+      clearRect: vi.fn(),
+      measureText: vi.fn().mockReturnValue({ width: 0 }),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      scale: vi.fn(),
+      setTransform: vi.fn(),
+      transform: vi.fn(),
+      clip: vi.fn(),
+      drawImage: vi.fn(),
+      getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(4 * 32 * 32) }),
+      putImageData: vi.fn(),
+      canvas: { width: 32, height: 32 },
+    }),
+  }),
+});
+
 // Mock Phaser GameObjects
 const mockGraphics = {
   x: 0,
@@ -53,31 +96,49 @@ vi.mock("phaser", () => {
       },
     };
     textures = {
-      createCanvas: vi.fn().mockReturnValue({
-        getContext: vi.fn().mockReturnValue({
-          fillStyle: "",
-          strokeStyle: "",
-          lineWidth: 1,
-          font: "",
-          fillRect: vi.fn(),
-          fillCircle: vi.fn(),
-          beginPath: vi.fn(),
-          moveTo: vi.fn(),
-          lineTo: vi.fn(),
-          closePath: vi.fn(),
-          stroke: vi.fn(),
-          fill: vi.fn(),
-          arc: vi.fn(),
-          rect: vi.fn(),
-          quadraticCurveTo: vi.fn(),
-          bezierCurveTo: vi.fn(),
-          ellipse: vi.fn(),
-          strokeRect: vi.fn(),
-          fillText: vi.fn(),
-          clearRect: vi.fn(),
-          measureText: vi.fn().mockReturnValue({ width: 0 }),
-        }),
-        refresh: vi.fn(),
+      createCanvas: vi.fn().mockImplementation(function(key: string, width: number, height: number) {
+        // Return a canvas mock where context.canvas references back to this object
+        const canvasMock = {
+          width,
+          height,
+          getContext: () => ({
+            fillStyle: "",
+            strokeStyle: "",
+            lineWidth: 1,
+            font: "",
+            fillRect: vi.fn(),
+            fillCircle: vi.fn(),
+            beginPath: vi.fn(),
+            moveTo: vi.fn(),
+            lineTo: vi.fn(),
+            closePath: vi.fn(),
+            stroke: vi.fn(),
+            fill: vi.fn(),
+            arc: vi.fn(),
+            rect: vi.fn(),
+            quadraticCurveTo: vi.fn(),
+            bezierCurveTo: vi.fn(),
+            ellipse: vi.fn(),
+            strokeRect: vi.fn(),
+            fillText: vi.fn(),
+            clearRect: vi.fn(),
+            measureText: vi.fn().mockReturnValue({ width: 0 }),
+            save: vi.fn(),
+            restore: vi.fn(),
+            translate: vi.fn(),
+            rotate: vi.fn(),
+            scale: vi.fn(),
+            setTransform: vi.fn(),
+            transform: vi.fn(),
+            clip: vi.fn(),
+            drawImage: vi.fn(),
+            getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(4 * 32 * 32) }),
+            putImageData: vi.fn(),
+            canvas: { width, height },
+          }),
+          refresh: vi.fn(),
+        };
+        return canvasMock;
       }),
     };
     add = {
@@ -335,7 +396,7 @@ describe("FactoryScene", () => {
       expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(1024, 1024);
     });
 
-    it("should render hub sprite centered at (32 * 32, 32 * 32) with display size 64x64", () => {
+    it("should render hub sprite centered at (32 * 32, 32 * 32) with native 64×64 texture", () => {
       const world = createMockWorld({
         hubOrigin: { x: 31, y: 31 },
         buildings: {
@@ -371,8 +432,8 @@ describe("FactoryScene", () => {
       expect(hubCall![0]).toBe(1024);
       expect(hubCall![1]).toBe(1024);
 
-      // setDisplaySize should be called with (64, 64) for hub
-      expect(mockSprite.setDisplaySize).toHaveBeenCalledWith(64, 64);
+      // setDisplaySize should NOT be called - hub uses native 64×64 texture
+      expect(mockSprite.setDisplaySize).not.toHaveBeenCalled();
     });
   });
 
