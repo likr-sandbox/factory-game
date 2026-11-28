@@ -15,6 +15,13 @@ import {
 } from "./input";
 import { UI_PALETTE } from "./palette";
 import { PlacementGhost } from "./overlays";
+import {
+  getBuildingAnimationFrame,
+  computeBeltItemLayout,
+  drawFaultIndicator,
+  drawDepletedIndicator,
+  syncBuildingStatusOverlays,
+} from "./statusRenderer";
 
 export const TILE_SIZE = 32;
 
@@ -35,6 +42,7 @@ export class FactoryScene extends Scene {
   // Status overlay tracking for faulted buildings and depleted deposits
   private faultOverlays: Map<string, GameObjects.Graphics> = new Map();
   private depletedOverlays: Map<string, GameObjects.Graphics> = new Map();
+  private statusOverlays: Map<string, GameObjects.Graphics> = new Map();
   // Placement ghost preview
   private placementGhost: PlacementGhost | null = null;
 
@@ -144,7 +152,7 @@ export class FactoryScene extends Scene {
   }
 
   /**
-   * Sync world state to game objects (buildings, items)
+   * Sync world state to game objects (buildings, items) using ID-based diffing
    * Uses explicit sprite tracking to prevent leaks
    */
   syncWorld(world: WorldState): void {
@@ -154,33 +162,19 @@ export class FactoryScene extends Scene {
       return;
     }
 
-    // Destroy all tracked building sprites
-    for (const sprite of this.buildingSprites.values()) {
-      sprite.destroy();
+    // Build sets of current IDs for diffing
+    const currentBuildingIds = new Set(Object.keys(world.buildings));
+    
+    // Diff building sprites: destroy removed, update existing or create new
+    for (const [id, sprite] of this.buildingSprites.entries()) {
+      if (!currentBuildingIds.has(id)) {
+        sprite.destroy();
+        this.buildingSprites.delete(id);
+      }
     }
-    this.buildingSprites.clear();
-
-    // Destroy all tracked item sprites
-    for (const sprite of this.itemSprites.values()) {
-      sprite.destroy();
-    }
-    this.itemSprites.clear();
-
-    // Destroy all tracked fault overlays
-    for (const overlay of this.faultOverlays.values()) {
-      overlay.destroy();
-    }
-    this.faultOverlays.clear();
-
-    // Destroy all tracked depleted overlays
-    for (const overlay of this.depletedOverlays.values()) {
-      overlay.destroy();
-    }
-    this.depletedOverlays.clear();
-
-    // Sync building sprites with explicit tracking
     for (const building of Object.values(world.buildings)) {
-      const frame = building.type === "belt" || building.type === "underground_belt" ? 0 : 0;
+      const sprite = this.buildingSprites.get(building.id);
+      const frame = getBuildingAnimationFrame(building, world);
       const baseKey = getBuildingTextureKey(building.type, building.direction, frame);
       const key = `${baseKey}_${building.faulted ? "faulted" : "ok"}`;
 
@@ -198,87 +192,158 @@ export class FactoryScene extends Scene {
         posY = building.y * TILE_SIZE + TILE_SIZE / 2;
       }
 
-      const sprite = this.add.sprite(posX, posY, key);
-      if (isHub) {
-        sprite.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2);
-      }
-      sprite.setDepth(building.y);
-      this.buildingSprites.set(building.id, sprite);
-
-      // Create fault overlay for faulted buildings
-      if (building.faulted) {
-        const faultOverlay = this.add.graphics();
-        faultOverlay.x = posX;
-        faultOverlay.y = posY;
-        faultOverlay.setDepth(building.y + 1); // Above building
-        
-        // Draw red warning indicator (exclamation mark shape)
-        const color = parseInt(UI_PALETTE.fault.hex.substring(1), 16);
-        faultOverlay.fillStyle(color, 1);
-        
-        // Draw a warning triangle/exclamation indicator
-        const size = 8;
-        const x = posX;
-        const y = isHub ? posY - TILE_SIZE : posY - TILE_SIZE / 2;
-        
-        // Draw exclamation mark - top bar
-        faultOverlay.fillRect(x - size / 2, y - 4, size, 2);
-        // Draw exclamation mark - bottom dot
-        faultOverlay.fillCircle(x, y + 2, 2);
-        
-        this.faultOverlays.set(building.id, faultOverlay);
-      }
-
-      // Track expected item keys for this building
-      for (let i = 0; i < building.beltItems.length; i++) {
-        const item = building.beltItems[i]!;
-        const itemKey = getItemTextureKey(item.material);
-        const spriteKey = `${building.id}_item_${i}`;
-
-        const itemSprite = this.add.sprite(
-          building.x * TILE_SIZE + TILE_SIZE / 2,
-          building.y * TILE_SIZE + TILE_SIZE / 2,
-          itemKey
-        );
-        itemSprite.setDepth(building.y + 0.5);
-        itemSprite.setName(spriteKey);
-        this.itemSprites.set(spriteKey, itemSprite);
+      if (sprite) {
+        // Reuse existing sprite
+        sprite.setTexture(key);
+        sprite.setPosition(posX, posY);
+        sprite.setDepth(building.y);
+        if (isHub) {
+          sprite.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2);
+        }
+      } else {
+        // Create new sprite
+        const newSprite = this.add.sprite(posX, posY, key);
+        if (isHub) {
+          newSprite.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2);
+        }
+        newSprite.setDepth(building.y);
+        this.buildingSprites.set(building.id, newSprite);
       }
     }
 
-    // Create depleted overlays for exhausted ore deposits
-    for (let y = 0; y < world.height; y++) {
-      for (let x = 0; x < world.width; x++) {
-        const tile = world.tiles[y]?.[x];
-        if (!tile || !tile.deposit) continue;
+    // Diff item sprites: track expected keys per building
+    const expectedItemKeys = new Set<string>();
+    for (const building of Object.values(world.buildings)) {
+      for (let i = 0; i < building.beltItems.length; i++) {
+        expectedItemKeys.add(`${building.id}_item_${i}`);
+      }
+    }
 
-        if (tile.deposit.remaining <= 0) {
-          const key = `depleted_${x}_${y}`;
-          const depletedOverlay = this.add.graphics();
-          depletedOverlay.x = x * TILE_SIZE + TILE_SIZE / 2;
-          depletedOverlay.y = y * TILE_SIZE + TILE_SIZE / 2;
-          depletedOverlay.setDepth(0.6); // Above deposit, below buildings
+    // Remove items no longer needed
+    for (const [key, sprite] of this.itemSprites.entries()) {
+      if (!expectedItemKeys.has(key)) {
+        sprite.destroy();
+        this.itemSprites.delete(key);
+      }
+    }
 
-          // Draw depleted indicator (red X mark)
-          const color = parseInt(UI_PALETTE.fault.hex.substring(1), 16);
-          depletedOverlay.lineStyle(2, color, 1);
-
-          // Draw X shape to indicate depleted
-          const size = 8;
-          const cx = x * TILE_SIZE + TILE_SIZE / 2;
-          const cy = y * TILE_SIZE + TILE_SIZE / 2;
-          
-          depletedOverlay.beginPath();
-          depletedOverlay.moveTo(cx - size / 2, cy - size / 2);
-          depletedOverlay.lineTo(cx + size / 2, cy + size / 2);
-          depletedOverlay.moveTo(cx + size / 2, cy - size / 2);
-          depletedOverlay.lineTo(cx - size / 2, cy + size / 2);
-          depletedOverlay.strokePath();
-
-          this.depletedOverlays.set(key, depletedOverlay);
+    // Update or create item sprites
+    for (const building of Object.values(world.buildings)) {
+      for (let i = 0; i < building.beltItems.length; i++) {
+        const item = building.beltItems[i]!;
+        const spriteKey = `${building.id}_item_${i}`;
+        const itemKey = getItemTextureKey(item.material);
+        
+        const layout = computeBeltItemLayout(building, i, building.beltItems.length, world.tick);
+        
+        let itemSprite = this.itemSprites.get(spriteKey);
+        if (itemSprite) {
+          itemSprite.setTexture(itemKey);
+          itemSprite.setPosition(layout.x, layout.y);
+          itemSprite.setScale(layout.scale);
+          itemSprite.setDepth(building.y + 0.5);
+        } else {
+          itemSprite = this.add.sprite(layout.x, layout.y, itemKey);
+          itemSprite.setScale(layout.scale);
+          itemSprite.setDepth(building.y + 0.5);
+          itemSprite.setName(spriteKey);
+          this.itemSprites.set(spriteKey, itemSprite);
         }
       }
     }
+
+    // Diff fault overlays: only for faulted buildings
+    const expectedFaultIds = new Set<string>();
+    for (const building of Object.values(world.buildings)) {
+      if (building.faulted) {
+        expectedFaultIds.add(building.id);
+      }
+    }
+
+    // Remove old fault overlays
+    for (const [id, overlay] of this.faultOverlays.entries()) {
+      if (!expectedFaultIds.has(id)) {
+        overlay.destroy();
+        this.faultOverlays.delete(id);
+      }
+    }
+
+    // Update or create fault overlays
+    for (const building of Object.values(world.buildings)) {
+      if (!building.faulted) continue;
+      
+      const isHub = building.type === "hub";
+      const posX = building.type === "hub" 
+        ? (building.x + 1) * TILE_SIZE 
+        : building.x * TILE_SIZE + TILE_SIZE / 2;
+      const posY = building.type === "hub" 
+        ? (building.y + 1) * TILE_SIZE 
+        : building.y * TILE_SIZE + TILE_SIZE / 2;
+
+      let overlay = this.faultOverlays.get(building.id);
+      if (overlay) {
+        drawFaultIndicator(overlay as unknown as import("./statusRenderer").Graphics, isHub, world.tick);
+        overlay.setPosition(posX, posY);
+        overlay.setDepth(building.y + 1);
+      } else {
+        overlay = this.add.graphics();
+        drawFaultIndicator(overlay as unknown as import("./statusRenderer").Graphics, isHub, world.tick);
+        overlay.setPosition(posX, posY);
+        overlay.setDepth(building.y + 1);
+        this.faultOverlays.set(building.id, overlay);
+      }
+    }
+
+    // Diff depleted overlays: only for tiles with deposit.remaining <= 0
+    const expectedDepletedKeys = new Set<string>();
+    for (let y = 0; y < world.height; y++) {
+      for (let x = 0; x < world.width; x++) {
+        const tile = world.tiles[y]?.[x];
+        if (tile?.deposit && tile.deposit.remaining <= 0) {
+          expectedDepletedKeys.add(`depleted_${x}_${y}`);
+        }
+      }
+    }
+
+    // Remove old depleted overlays
+    for (const [key, overlay] of this.depletedOverlays.entries()) {
+      if (!expectedDepletedKeys.has(key)) {
+        overlay.destroy();
+        this.depletedOverlays.delete(key);
+      }
+    }
+
+    // Update or create depleted overlays
+    for (let y = 0; y < world.height; y++) {
+      for (let x = 0; x < world.width; x++) {
+        const tile = world.tiles[y]?.[x];
+        if (!tile?.deposit || tile.deposit.remaining > 0) continue;
+        
+        const key = `depleted_${x}_${y}`;
+        const posX = x * TILE_SIZE + TILE_SIZE / 2;
+        const posY = y * TILE_SIZE + TILE_SIZE / 2;
+
+        let overlay = this.depletedOverlays.get(key);
+        if (overlay) {
+          drawDepletedIndicator(overlay as unknown as import("./statusRenderer").Graphics);
+          overlay.setPosition(posX, posY);
+          overlay.setDepth(0.6);
+        } else {
+          overlay = this.add.graphics();
+          drawDepletedIndicator(overlay as unknown as import("./statusRenderer").Graphics);
+          overlay.setPosition(posX, posY);
+          overlay.setDepth(0.6);
+          this.depletedOverlays.set(key, overlay);
+        }
+      }
+    }
+
+    // Sync building status overlays (progress bars, recipe/filter indicators, stall warnings)
+    syncBuildingStatusOverlays(
+      this as unknown as import("./statusRenderer").Scene, 
+      this.statusOverlays as unknown as Map<string, import("./statusRenderer").Graphics>, 
+      world
+    );
   }
 
   /**
