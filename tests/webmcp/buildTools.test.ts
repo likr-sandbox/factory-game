@@ -218,4 +218,118 @@ describe("createBuildToolHandlers", () => {
     expect(result.success).toBe(false);
     expect(mutated).toBe(false);
   });
+
+  it("should return INVALID_INPUT error for non-integer coordinates in place_building", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.place_building({ x: 10.5, y: 10, type: "belt", direction: "E" } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for non-existent building type", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.place_building({ x: 10, y: 10, type: "invalid_type" as any, direction: "N" } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for non-integer coordinates in place_belt_line", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.place_belt_line({ startX: 10.5, startY: 10, endX: 15, endY: 12 } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for invalid cornerFirst value", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.place_belt_line({ startX: 10, startY: 10, endX: 15, endY: 12, cornerFirst: "z" as any } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for non-integer coordinates in remove_area", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.remove_area({ x: 10.5, y: 10, width: 3, height: 1 } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for negative width/height in remove_area", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.remove_area({ x: 10, y: 10, width: -1, height: 1 } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for non-integer coordinates in set_recipe", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.set_recipe({ x: 10.5, y: 10, recipeId: "iron_plate" } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for invalid action kind in batch_actions", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.batch_actions({ actions: [{ kind: "invalid_kind", input: {} }] } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for non-integer coordinates in batch_actions place_building", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.batch_actions({
+      actions: [{ kind: "place_building", input: { x: 10.5, y: 10, type: "belt", direction: "E" } }]
+    } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("should return INVALID_INPUT error for invalid type in batch_actions place_building", () => {
+    const world = createWorld(42);
+    const handlers = createBuildToolHandlers(() => world);
+
+    const result = handlers.batch_actions({
+      actions: [{ kind: "place_building", input: { x: 10, y: 10, type: "invalid_type" as any, direction: "E" } }]
+    } as Record<string, unknown>);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("INVALID_INPUT");
+    }
+  });
 });

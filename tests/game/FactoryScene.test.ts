@@ -175,6 +175,105 @@ describe("FactoryScene", () => {
     scene = new FactoryScene();
   });
 
+  describe("centerCameraOnHub", () => {
+    it("should call camera.centerOn with hub center position", () => {
+      const world = createMockWorld({ hubOrigin: { x: 31, y: 31 } });
+      scene.setContext(world, {
+        mode: "place",
+        selectedBuilding: null,
+        direction: "N",
+        selectedRecipe: null,
+        selectedFilter: null,
+        inspectedCoord: null,
+        isDraggingBelt: false,
+        dragStartX: null,
+        dragStartY: null,
+      });
+
+      scene.centerCameraOnHub();
+
+      // Should call centerOn with (32 * 32, 32 * 32) = (1024, 1024)
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(1024, 1024);
+    });
+
+    it("should use custom hubOrigin position", () => {
+      const world = createMockWorld({ hubOrigin: { x: 20, y: 20 } });
+      scene.setContext(world, {
+        mode: "place",
+        selectedBuilding: null,
+        direction: "N",
+        selectedRecipe: null,
+        selectedFilter: null,
+        inspectedCoord: null,
+        isDraggingBelt: false,
+        dragStartX: null,
+        dragStartY: null,
+      });
+
+      scene.centerCameraOnHub();
+
+      // Should call centerOn with (21 * 32, 21 * 32) = (672, 672)
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(672, 672);
+    });
+
+    it("should handle undefined world gracefully", () => {
+      scene.centerCameraOnHub();
+      // Should use default hubOrigin { x: 31, y: 31 }
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(1024, 1024);
+    });
+  });
+
+  describe("isInputFocused", () => {
+    it("should return true when INPUT element is focused", () => {
+      const mockInputElement = { tagName: "INPUT" };
+      const originalDocument = globalThis.document;
+      globalThis.document = { activeElement: mockInputElement as unknown as Element } as unknown as Document;
+      
+      expect((scene as any).isInputFocused()).toBe(true);
+      
+      globalThis.document = originalDocument;
+    });
+
+    it("should return true when TEXTAREA element is focused", () => {
+      const mockTextareaElement = { tagName: "TEXTAREA" };
+      const originalDocument = globalThis.document;
+      globalThis.document = { activeElement: mockTextareaElement as unknown as Element } as unknown as Document;
+      
+      expect((scene as any).isInputFocused()).toBe(true);
+      
+      globalThis.document = originalDocument;
+    });
+
+    it("should return true when SELECT element is focused", () => {
+      const mockSelectElement = { tagName: "SELECT" };
+      const originalDocument = globalThis.document;
+      globalThis.document = { activeElement: mockSelectElement as unknown as Element } as unknown as Document;
+      
+      expect((scene as any).isInputFocused()).toBe(true);
+      
+      globalThis.document = originalDocument;
+    });
+
+    it("should return false when DIV element is focused", () => {
+      const mockDivElement = { tagName: "DIV" };
+      const originalDocument = globalThis.document;
+      globalThis.document = { activeElement: mockDivElement as unknown as Element } as unknown as Document;
+      
+      expect((scene as any).isInputFocused()).toBe(false);
+      
+      globalThis.document = originalDocument;
+    });
+
+    it("should return false when no element is focused", () => {
+      const originalDocument = globalThis.document;
+      globalThis.document = { activeElement: null } as unknown as Document;
+      
+      expect((scene as any).isInputFocused()).toBe(false);
+      
+      globalThis.document = originalDocument;
+    });
+  });
+
   describe("startup crash fix (syncWorld before create)", () => {
     it("should NOT throw when syncWorld is called before create() (this.add is undefined)", () => {
       // This simulates the bug where requestAnimationFrame calls syncWorld before Phaser boots create()

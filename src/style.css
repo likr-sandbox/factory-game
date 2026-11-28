@@ -100,18 +100,23 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  overflow: visible;
 }
 
 .inspector-panel {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 3px 8px;
   background-color: var(--bg-light);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 12px;
   color: var(--text-primary);
+  white-space: normal;
+  max-width: 320px;
 }
 
 .direction-indicator {
@@ -338,4 +343,88 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Speed button styling with dark theme and active state */
+.speed-btn {
+  padding: 4px 8px;
+  background-color: var(--bg-medium);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.speed-btn:hover {
+  background-color: var(--border-color);
+}
+
+.speed-btn.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+/* Tech button styling with dark theme */
+.tech-btn {
+  padding: 4px 8px;
+  background-color: var(--bg-medium);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.tech-btn:hover:not(:disabled) {
+  background-color: var(--border-color);
+}
+
+.tech-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Reset and random button styling */
+.reset-btn, .random-btn {
+  padding: 4px 8px;
+  background-color: var(--bg-medium);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.reset-btn:hover, .random-btn:hover {
+  background-color: var(--border-color);
+}
+
+.reset-btn {
+  background-color: #e94560;
+  border-color: #c7364f;
+}
+
+.reset-btn:hover {
+  background-color: #c7364f;
+}
+
+/* Seed input styling */
+.seed-input {
+  padding: 4px 8px;
+  background-color: var(--bg-medium);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.seed-input:focus {
+  border-color: var(--accent-color);
 }

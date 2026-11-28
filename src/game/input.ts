@@ -2,6 +2,8 @@
 import type { WorldState, Direction, BuildingState, RecipeId, MaterialId, ActionResult } from "../sim/types";
 import { placeBuilding, placeBeltLine, removeArea, setRecipe } from "../sim/actions";
 import { isHubTile, getTile, oppositeDirection } from "../sim/world";
+import { RECIPE_CATALOG } from "../sim/catalog";
+import { isRecipeUnlocked } from "../sim/progression";
 
 export type InputMode = "place" | "demolish" | "inspect";
 
@@ -58,6 +60,13 @@ export function rotateBuildingAt(world: WorldState, x: number, y: number): Actio
   return { success: false, error: { code: "ROTATE_FAILED", message: "Cannot rotate" } };
 }
 
+/**
+ * Get the default unlocked recipe for a building type
+ */
+function getDefaultRecipeForBuilding(building: "smelter" | "assembler"): RecipeId {
+  return building === "smelter" ? "iron_plate" : "iron_gear";
+}
+
 export function handleTileClick(
   world: WorldState,
   state: InputState,
@@ -65,9 +74,25 @@ export function handleTileClick(
   y: number
 ): ActionResult {
   if (state.mode === "place" && state.selectedBuilding) {
-    const recipe = state.selectedBuilding === "smelter" || state.selectedBuilding === "assembler"
-      ? state.selectedRecipe ?? undefined
-      : undefined;
+    let recipe: RecipeId | undefined = undefined;
+    if (state.selectedBuilding === "smelter" || state.selectedBuilding === "assembler") {
+      // Check if selectedRecipe matches the building type
+      const candidateRecipe = state.selectedRecipe;
+      if (candidateRecipe) {
+        const recipeEntry = RECIPE_CATALOG[candidateRecipe];
+        const isMatchingType = recipeEntry?.building === state.selectedBuilding;
+        const isUnlocked = isRecipeUnlocked(world, candidateRecipe);
+        
+        if (isMatchingType && isUnlocked) {
+          recipe = candidateRecipe;
+        } else {
+          // Auto-apply default unlocked recipe for this building type
+          recipe = getDefaultRecipeForBuilding(state.selectedBuilding);
+        }
+      } else {
+        recipe = getDefaultRecipeForBuilding(state.selectedBuilding);
+      }
+    }
     const filter = state.selectedBuilding === "splitter" || state.selectedBuilding === "filter_splitter"
       ? state.selectedFilter ?? undefined
       : undefined;
