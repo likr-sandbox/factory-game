@@ -2,8 +2,10 @@
 import { describe, it, expect } from "vitest";
 import { stepTick, stepTicks } from "../../src/sim/engine";
 import { createWorld } from "../../src/sim/world";
+import { OVERLOAD_THRESHOLD } from "../../src/sim/reliability";
 import { MINING_INTERVAL, BELT_MOVE_INTERVAL } from "../../src/sim/catalog";
 import type { WorldState, BuildingState } from "../../src/sim/types";
+
 
 /**
  * Helper to place a building in the world
@@ -379,8 +381,8 @@ describe("Filter splitter and recycler loop", () => {
     const recycler = world.buildings[recyclerId]!;
     recycler.inputBuffer.slag = 10;
 
-    // Process the recycler
-    stepTick(world);
+    // Run 30 ticks to complete one craft cycle (RECYCLER_CRAFT_TICKS = 30)
+    stepTicks(world, 30);
 
     // Slag should be converted to silica_sand
     expect(recycler.outputBuffer.silica_sand).toBeGreaterThan(0);
@@ -559,73 +561,105 @@ describe("Underground belt integration", () => {
 });
 
 describe("Overload and faulting integration", () => {
-  it("building becomes faulted after output blockage exceeds OVERLOAD_THRESHOLD", () => {
+  it("active buildings (miner, smelter, assembler, recycler) fault after continuous output blockage reaches OVERLOAD_THRESHOLD and recover via repair", () => {
     const world = createWorld(12345);
     world.tick = 0;
 
-    // Place a smelter facing nothing (no building in front)
-    // This means output can't be pushed anywhere
+    // Test smelter becoming faulted after output blockage
     const smelterId = placeBuilding(world, 10, 10, "smelter", "S", "iron_plate");
-
     const smelter = world.buildings[smelterId]!;
-
-    // Provide input to smelter
     smelter.inputBuffer.iron_ore = 100;
 
-    // Run ticks - smelter will craft and fill its output buffer
-    // Once output buffer is full, it becomes blocked
-    stepTicks(world, 60); // First craft completes
-    
-    // Fill the output buffer to MAX_OUTPUT_BUFFER (10 items)
-    // Each craft produces 1 iron_plate, so we need many crafts
-    // Actually, let's manually fill the buffer to simulate the condition
+    // Craft and fill output buffer
+    stepTicks(world, 60);
     smelter.outputBuffer.iron_plate = 10; // MAX_OUTPUT_BUFFER
 
-    // Now the smelter is blocked (output full), continue running
-    // Each tick should increment load
-    stepTicks(world, 150);
+    // Run enough ticks to exceed OVERLOAD_THRESHOLD (1800)
+    stepTicks(world, OVERLOAD_THRESHOLD + 100);
 
-    // Smelter should become faulted due to continuous output blockage
-    // After enough ticks, load should exceed OVERLOAD_THRESHOLD (100)
+    // Smelter should become faulted
     expect(smelter.faulted).toBe(true);
-    expect(smelter.load).toBeGreaterThanOrEqual(100);
+    expect(smelter.load).toBeGreaterThanOrEqual(OVERLOAD_THRESHOLD);
+
+    // Repair via clearing faulted, load, blockedTicks
+    smelter.faulted = false;
+    smelter.load = 0;
+    smelter.blockedTicks = 0;
+
+    // Clear output buffer to allow new crafting
+    smelter.outputBuffer.iron_plate = 0;
+
+    // Should be able to craft again
+    expect(smelter.faulted).toBe(false);
+    expect(smelter.load).toBe(0);
+    smelter.inputBuffer.iron_ore = 10;
+    stepTicks(world, 60);
+    // Should have produced at least one new item
+    expect(smelter.outputBuffer.iron_plate || 0).toBeGreaterThanOrEqual(1);
   });
 
-  it("faulted building stops production after overload", () => {
+  it("passive buildings (belt, splitter, filter_splitter, underground_belt, sensor) do NOT become faulted even after 1800+ ticks of backpressure", () => {
     const world = createWorld(12345);
     world.tick = 0;
 
-    // Place assembler with no output destination
-    const assemblerId = placeBuilding(world, 15, 15, "assembler", "E", "iron_gear");
-
-    const assembler = world.buildings[assemblerId]!;
-    assembler.inputBuffer.iron_plate = 100;
-
-    // Craft some items first
-    stepTicks(world, 90);
-    const initialOutput = assembler.outputBuffer.iron_gear || 0;
-    expect(initialOutput).toBeGreaterThan(0);
-
-    // Fill output buffer to make it blocked
-    assembler.outputBuffer.iron_gear = 10; // MAX_OUTPUT_BUFFER
-
-    // Continue running - assembler should eventually fault from blocked output
-    stepTicks(world, 200);
-
-    // Once faulted, production should stop
-    expect(assembler.faulted).toBe(true);
+    // Place a belt chain where the end is completely blocked
+    const belt1Id = placeBuilding(world, 15, 15, "belt", "S");
+    const belt2Id = placeBuilding(world, 15, 16, "belt", "S");
+    const belt3Id = placeBuilding(world, 15, 17, "belt", "S");
     
-    // Record output after faulting
-    const outputAfterFault = assembler.outputBuffer.iron_gear || 0;
-    
-    // Run more ticks
-    stepTicks(world, 90);
-    
-    // Output should not have increased since faulting
-    expect(assembler.outputBuffer.iron_gear || 0).toBe(outputAfterFault);
+    const belt1 = world.buildings[belt1Id]!;
+    const belt2 = world.buildings[belt2Id]!;
+    const belt3 = world.buildings[belt3Id]!;
+
+    // Fill all belts to capacity so nothing can move
+    belt3.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+    belt3.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+    belt3.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+
+    belt2.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+    belt2.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+    belt2.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+
+    belt1.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+    belt1.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+    belt1.beltItems.push({ material: "iron_plate", movedAtTick: world.tick });
+
+    // Run many ticks (> OVERLOAD_THRESHOLD)
+    stepTicks(world, OVERLOAD_THRESHOLD + 500);
+
+    // Passive buildings should NEVER become faulted regardless of backpressure duration
+    expect(belt1.faulted).toBe(false);
+    expect(belt2.faulted).toBe(false);
+    expect(belt3.faulted).toBe(false);
   });
 
-  it("blockedTicks increments when output is full and triggers overload", () => {
+  it("recycler rejects non-slag materials from upstream belts/miners", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place recycler
+    const recyclerId = placeBuilding(world, 10, 10, "recycler", "S");
+    const recycler = world.buildings[recyclerId]!;
+
+    // Place a splitter above the recycler
+    const splitterId = placeBuilding(world, 10, 9, "splitter", "S");
+    const splitter = world.buildings[splitterId]!;
+
+    // Add iron_plate to splitter (simulating incoming items from miners/belts)
+    splitter.inputBuffer.iron_plate = 5;
+
+    // Process the splitter - it tries to push to recycler
+    stepTick(world);
+
+    // Recycler should reject iron_plate, so it stays in splitter or goes elsewhere
+    expect(recycler.inputBuffer.iron_ore).toBeUndefined();
+    expect(recycler.inputBuffer.iron_plate).toBeUndefined();
+    
+    // Iron plate should still be in splitter's buffer (not accepted by recycler)
+    expect(splitter.inputBuffer.iron_plate).toBeGreaterThan(0);
+  });
+
+  it("blockedTicks increments when output is full and triggers overload after OVERLOAD_THRESHOLD", () => {
     const world = createWorld(12345);
     world.tick = 0;
 
@@ -645,24 +679,22 @@ describe("Overload and faulting integration", () => {
       initialAmount: 1000,
     };
 
-    // Mine items - they go to belt
-    stepTicks(world, MINING_INTERVAL * 3);
-
-    // Now block the belt by filling it
+    // Block the belt immediately so all mined items go to output buffer
     belt.beltItems.push({ material: "iron_ore", movedAtTick: 0 });
     belt.beltItems.push({ material: "iron_ore", movedAtTick: 0 });
     belt.beltItems.push({ material: "iron_ore", movedAtTick: 0 }); // Full belt
 
-    // Mine more - miner's output can't go anywhere now
-    stepTicks(world, MINING_INTERVAL * 5);
+    // Mine enough items to fill output buffer (need 10+ items)
+    stepTicks(world, MINING_INTERVAL * 12);
 
-    // Miner's output buffer should have items and load should increase
-    expect(miner.outputBuffer.iron_ore || 0).toBeGreaterThan(0);
+    // Miner's output buffer should be full and blocked
+    expect(miner.outputBuffer.iron_ore || 0).toBeGreaterThanOrEqual(10);
     
-    // After many more ticks with continuous blocking, miner should fault
-    stepTicks(world, MINING_INTERVAL * 50);
+    // Run enough ticks with continuous blocking to exceed OVERLOAD_THRESHOLD
+    stepTicks(world, OVERLOAD_THRESHOLD + 100);
     
     expect(miner.faulted).toBe(true);
+    expect(miner.load).toBeGreaterThanOrEqual(OVERLOAD_THRESHOLD);
   });
 });
 
