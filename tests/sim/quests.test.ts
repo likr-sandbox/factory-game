@@ -5,7 +5,7 @@ import { createWorld } from "../../src/sim/world";
 import {
   generateDynamicQuest, updateQuestProgress, processQuests, completeQuest,
   awardResearchPoints, getActiveQuests, isQuestExpired, isQuestComplete,
-  getQuestProgress, MAX_ACTIVE_QUESTS,
+  getQuestProgress, MAX_ACTIVE_QUESTS, QUEST_DURATION_TICKS,
 } from "../../src/sim/quests";
 
 describe("Dynamic Delivery Quests", () => {
@@ -77,14 +77,21 @@ describe("Dynamic Delivery Quests", () => {
     it("should return false before expiration", () => {
       const world = createTestWorld();
       const quest = generateDynamicQuest(world)!;
-      world.tick = 100;
+      world.tick = 6001; // 100 seconds - should NOT be expired yet (duration is 36000 ticks = 600 seconds)
       expect(isQuestExpired(world, quest)).toBe(false);
     });
 
     it("should return true after expiration", () => {
       const world = createTestWorld();
       const quest = generateDynamicQuest(world)!;
-      world.tick = 6001;
+      world.tick = QUEST_DURATION_TICKS;
+      expect(isQuestExpired(world, quest)).toBe(true);
+    });
+
+    it("should return true at tick >= QUEST_DURATION_TICKS", () => {
+      const world = createTestWorld();
+      const quest = generateDynamicQuest(world)!;
+      world.tick = QUEST_DURATION_TICKS + 1;
       expect(isQuestExpired(world, quest)).toBe(true);
     });
   });
@@ -93,7 +100,7 @@ describe("Dynamic Delivery Quests", () => {
     it("should remove expired and generate replacements", () => {
       const world = createTestWorld();
       const original = generateDynamicQuest(world)!;
-      world.tick = 6001;
+      world.tick = QUEST_DURATION_TICKS + 1;
       processQuests(world);
       expect(world.activeQuests?.length).toBe(MAX_ACTIVE_QUESTS);
       expect(world.activeQuests?.some(q => q.questId === original.questId)).toBe(false);
@@ -178,7 +185,7 @@ describe("Dynamic Delivery Quests", () => {
       const quest = generateDynamicQuest(world)!;
       
       // Advance tick to expire the quest without completing it
-      world.tick = 6001;
+      world.tick = QUEST_DURATION_TICKS + 1;
       
       // Process should remove expired quest without awarding points
       const initialPoints = world.researchPoints || 0;
