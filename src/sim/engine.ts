@@ -286,8 +286,9 @@ function canAcceptItem(building: BuildingState, material: MaterialId): boolean {
       return recipe.inputs.hasOwnProperty(material);
     case "hub":
     case "underground_belt":
-    case "recycler":
       return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
+    case "recycler":
+      return material === "slag" && countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
     default:
       return false;
   }
@@ -348,6 +349,12 @@ function transferItem(
 
   // Determine how much can be accepted
   let accepted = 0;
+  
+  // Recyclers only accept slag
+  if (targetBuilding.type === "recycler" && material !== "slag") {
+    return 0;
+  }
+  
   switch (targetBuilding.type) {
     case "belt":
       accepted = Math.min(available, maxAmount, 3 - targetBuilding.beltItems.length);
