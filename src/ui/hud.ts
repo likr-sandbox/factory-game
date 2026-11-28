@@ -273,13 +273,8 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
       }
 
       // Update tech tree buttons non-destructively
-      const techStatus = getTechTreeStatus(world);
-      const allUnlocked = (techStatus.undergroundBelt && techStatus.filterSplitter && 
-        techStatus.highEfficiencyRecipes.ironPlateHigh && techStatus.highEfficiencyRecipes.copperPlateHigh &&
-        techStatus.sensor && techStatus.recycler &&
-        techStatus.advancedSmelting.steelPlate && techStatus.advancedSmelting.siliconWafer &&
-        techStatus.electronics.assembler && techStatus.electronics.circuitBoard && techStatus.electronics.microchip &&
-        techStatus.automation.automationModule);
+      const unlockedTechs = new Set(world.unlockedTechs || []);
+      const allUnlocked = TECH_BUTTONS.every(t => unlockedTechs.has(t.techId));
       
       if (allUnlocked) {
         // All techs unlocked - hide the tech tree container
@@ -287,20 +282,19 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
       } else {
         techTreeEl.style.display = "";
         // Non-destructive update: disable buttons and update labels/costs
-        const unlockedTechs = new Set(world.unlockedTechs || []);
         
         // Update each tech button
-        const updateTechBtn = (techId: string, unlocked: boolean) => {
+        const updateTechBtn = (techId: string, isUnlocked: boolean) => {
           const entry = techButtonMap[techId];
           if (!entry) return;
           const { btn, cost } = entry;
           const techLabel = TECH_BUTTONS.find(t => t.techId === techId)?.label || techId;
           
-          if (unlocked) {
+          if (isUnlocked) {
             btn.disabled = true;
             btn.style.display = "none";
           } else if ((world.researchPoints ?? 0) < cost) {
-            // RP不足で無効化
+            // RP 不足で無効化
             btn.disabled = true;
             btn.style.display = "";
             btn.textContent = `${techLabel} (${cost}RP - 不足)`;
@@ -313,14 +307,14 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
           }
         };
         
-        updateTechBtn("filter_splitter", techStatus.filterSplitter);
-        updateTechBtn("underground_belt", techStatus.undergroundBelt);
-        updateTechBtn("sensor", techStatus.sensor);
-        updateTechBtn("recycler", techStatus.recycler);
-        updateTechBtn("advanced_smelting", techStatus.advancedSmelting.steelPlate || techStatus.advancedSmelting.siliconWafer);
-        updateTechBtn("electronics", techStatus.electronics.assembler || techStatus.electronics.circuitBoard || techStatus.electronics.microchip);
-        updateTechBtn("automation", techStatus.automation.automationModule);
-        updateTechBtn("high_efficiency", techStatus.highEfficiencyRecipes.ironPlateHigh || techStatus.highEfficiencyRecipes.copperPlateHigh);
+        updateTechBtn("filter_splitter", unlockedTechs.has("filter_splitter"));
+        updateTechBtn("underground_belt", unlockedTechs.has("underground_belt"));
+        updateTechBtn("high_efficiency", unlockedTechs.has("high_efficiency"));
+        updateTechBtn("sensor", unlockedTechs.has("sensor"));
+        updateTechBtn("recycler", unlockedTechs.has("recycler"));
+        updateTechBtn("advanced_smelting", unlockedTechs.has("advanced_smelting"));
+        updateTechBtn("electronics", unlockedTechs.has("electronics"));
+        updateTechBtn("automation", unlockedTechs.has("automation"));
       }
 
       // Update active quests with material names from MATERIAL_CATALOG

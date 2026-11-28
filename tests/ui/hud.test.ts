@@ -417,4 +417,26 @@ describe("mountHud", () => {
     
     handle.destroy();
   });
+
+  it("should show all 8 tech buttons visible and enabled when none unlocked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = [];
+    world.researchPoints = 1000;
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    
+    expect(buttons.length).toBe(8);
+    buttons.forEach((btn: any) => {
+      expect(btn.style.display).not.toBe("none");
+      expect(btn.disabled).toBe(false);
+      expect(btn.textContent).toContain("RP)"); // Should have cost, not "不足"
+      expect(btn.textContent).not.toContain("アンロック"); // Should show cost, not placeholder
+    });
+    
+    handle.destroy();
+  });
 });
+
