@@ -362,6 +362,11 @@ export class FactoryScene extends Scene {
           }
           const result = handleTileClick(this.world, this.inputState, tileX, tileY);
           if (result.success) {
+            // Immediately update mode overlay selection frame in inspect mode
+            if (this.inputState.mode === "inspect" && this.modeOverlay && this.inputState.inspectedCoord) {
+              this.modeOverlay.setMode("inspect");
+              this.modeOverlay.setSelectedTile(this.inputState.inspectedCoord.x, this.inputState.inspectedCoord.y);
+            }
             this.events.emit("worldMutated");
           } else {
             this.events.emit("actionFailed", result.error);

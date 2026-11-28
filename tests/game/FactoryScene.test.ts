@@ -912,6 +912,8 @@ describe("PlacementGhost", () => {
     strokeRect: ReturnType<typeof vi.fn>;
     moveTo: ReturnType<typeof vi.fn>;
     lineTo: ReturnType<typeof vi.fn>;
+    beginPath: ReturnType<typeof vi.fn>;
+    strokePath: ReturnType<typeof vi.fn>;
     clear: ReturnType<typeof vi.fn>;
     setVisible: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
@@ -936,6 +938,8 @@ describe("PlacementGhost", () => {
       strokeRect: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
+      beginPath: vi.fn(),
+      strokePath: vi.fn(),
       clear: vi.fn(),
       setVisible: vi.fn(),
       destroy: vi.fn(),

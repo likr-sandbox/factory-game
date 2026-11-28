@@ -172,7 +172,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
-      (minimapHandle?.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)?.call(minimapHandle, activeWorld, scene?.getCameraViewport());
+      minimapHandle?.update(activeWorld, scene?.getCameraViewport());
       scene?.centerCameraOnHub();
     },
   });
@@ -265,7 +265,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
-      (minimapHandle?.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)?.call(minimapHandle, activeWorld, scene?.getCameraViewport());
+      minimapHandle?.update(activeWorld, scene?.getCameraViewport());
     },
     env: { document: doc as unknown as { modelContext?: ModelContextLike }, navigator: (globalThis as unknown as { navigator?: { modelContext?: ModelContextLike } }).navigator },
   });
@@ -333,7 +333,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     hud?.update(activeWorld);
     paletteBar?.sync(activeWorld, inputState);
     inspector?.update(activeWorld, inputState.inspectedCoord);
-    (minimapHandle?.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)?.call(minimapHandle, activeWorld, scene?.getCameraViewport());
+    minimapHandle?.update(activeWorld, scene?.getCameraViewport());
     paletteBar?.setFeedback(null); // Clear feedback on successful mutation
   });
 
@@ -367,7 +367,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       inspector.update(activeWorld, inputState.inspectedCoord);
     }
     if (minimapHandle) {
-      (minimapHandle.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)(activeWorld, scene?.getCameraViewport());
+      minimapHandle.update(activeWorld, scene?.getCameraViewport());
     }
 
     requestAnimationFrame(gameLoop);
