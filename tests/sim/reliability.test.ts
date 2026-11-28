@@ -620,3 +620,137 @@ describe("Reliability mechanics integration", () => {
     expect(belt.faulted).toBe(false);
   });
 });
+
+// ============================================================================
+// Per-Material Buffer Cap Tests
+// ============================================================================
+
+describe("Per-material buffer caps for smelter/assembler", () => {
+  it("accepts items for multi-material recipes even when total inputBuffer exceeds 10, up to per-material limit Math.max(6, requiredAmount * 3)", () => {
+    const world = createTestWorld(10, 5);
+
+    // Underground belt with multiple materials (standalone, no pair)
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { iron_ore: 15, copper_ore: 15 };
+
+    // Smelter directly in front (no intermediate belts)
+    const smelter = addBuilding(world, "smelter", 2, 2, "E");
+    smelter.recipeId = "iron_plate"; // Requires iron_ore: 2
+
+    processUndergroundBelts(world);
+
+    // iron_ore should be accepted up to its per-material limit (max(6, 2*3) = 6)
+    expect(smelter.inputBuffer.iron_ore).toBe(6);
+    // copper_ore is not in recipe, should be rejected (0 transferred)
+    expect(smelter.inputBuffer.copper_ore).toBeUndefined();
+    // Remaining iron_ore stays in underground belt's inputBuffer
+    expect(ub1.inputBuffer.iron_ore).toBe(9); // 15 - 6 = 9
+  });
+
+  it("stops accepting once the per-material limit is reached", () => {
+    const world = createTestWorld(10, 5);
+
+    // Pre-fill smelter to near capacity for iron_ore
+    const smelter = addBuilding(world, "smelter", 2, 2, "E");
+    smelter.recipeId = "iron_plate";
+    smelter.inputBuffer = { iron_ore: 5 }; // Already has 5, limit is 6, so only 1 more can be accepted
+
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { iron_ore: 10 };
+
+    processUndergroundBelts(world);
+
+    // Should only accept 1 more iron_ore to reach limit of 6
+    expect(smelter.inputBuffer.iron_ore).toBe(6);
+    // ub1 should have 9 remaining
+    expect(ub1.inputBuffer.iron_ore).toBe(9);
+  });
+
+  it("rejects materials not in the recipe", () => {
+    const world = createTestWorld(10, 5);
+
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { iron_ore: 10, copper_ore: 10, slag: 10 };
+
+    // Smelter with iron_plate recipe - only accepts iron_ore
+    const smelter = addBuilding(world, "smelter", 2, 2, "E");
+    smelter.recipeId = "iron_plate";
+
+    processUndergroundBelts(world);
+
+    // copper_ore and slag are not in recipe, should be rejected
+    expect(smelter.inputBuffer.copper_ore).toBeUndefined();
+    expect(smelter.inputBuffer.slag).toBeUndefined();
+    // iron_ore should be accepted up to limit
+    expect(smelter.inputBuffer.iron_ore).toBe(6);
+    // Remaining items stay in ub1
+    expect(ub1.inputBuffer.iron_ore).toBe(4); // 10 - 6
+    expect(ub1.inputBuffer.copper_ore).toBe(10);
+    expect(ub1.inputBuffer.slag).toBe(10);
+  });
+
+  it("fail-fast rejects all items when recipeId is unset", () => {
+    const world = createTestWorld(10, 5);
+
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { iron_ore: 10, copper_ore: 5 };
+
+    // Smelter without recipeId set
+    const smelter = addBuilding(world, "smelter", 2, 2, "E");
+    // recipeId is undefined
+
+    processUndergroundBelts(world);
+
+    // No items should be accepted without a recipe
+    expect(smelter.inputBuffer.iron_ore).toBeUndefined();
+    expect(smelter.inputBuffer.copper_ore).toBeUndefined();
+    // All items remain in ub1
+    expect(ub1.inputBuffer.iron_ore).toBe(10);
+    expect(ub1.inputBuffer.copper_ore).toBe(5);
+  });
+
+  it("processFilterSplitters respects per-material limits when transferring to smelter", () => {
+    const world = createTestWorld(10, 5);
+
+    // Filter splitter facing E
+    const splitter = addBuilding(world, "filter_splitter", 1, 2, "E");
+    splitter.filterMaterial = "iron_ore";
+    splitter.inputBuffer = { iron_ore: 10, copper_ore: 5 };
+
+    // Smelter in front with iron_plate recipe (accepts iron_ore)
+    const smelter = addBuilding(world, "smelter", 2, 2, "E");
+    smelter.recipeId = "iron_plate";
+
+    processFilterSplitters(world);
+
+    // iron_ore should be transferred up to per-material limit (6)
+    expect(smelter.inputBuffer.iron_ore).toBe(6);
+    // copper_ore rejected (not in recipe)
+    expect(smelter.inputBuffer.copper_ore).toBeUndefined();
+    // Remaining iron_ore stays in splitter
+    expect(splitter.inputBuffer.iron_ore).toBe(4); // 10 - 6 = 4
+  });
+
+  it("assembler respects per-material limits for multi-input recipes", () => {
+    const world = createTestWorld(10, 5);
+
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    // circuit_board recipe needs: iron_plate: 1, copper_wire: 3
+    // Limits: iron_plate = max(6, 1*3) = 6, copper_wire = max(6, 3*3) = 9
+    ub1.inputBuffer = { iron_plate: 20, copper_wire: 20 };
+
+    // Assembler directly in front (no intermediate belts)
+    const assembler = addBuilding(world, "assembler", 2, 2, "E");
+    assembler.recipeId = "circuit_board";
+
+    processUndergroundBelts(world);
+
+    // iron_plate up to limit 6
+    expect(assembler.inputBuffer.iron_plate).toBe(6);
+    // copper_wire up to limit 9
+    expect(assembler.inputBuffer.copper_wire).toBe(9);
+    // Remaining stays in ub1
+    expect(ub1.inputBuffer.iron_plate).toBe(14); // 20 - 6
+    expect(ub1.inputBuffer.copper_wire).toBe(11); // 20 - 9
+  });
+});
