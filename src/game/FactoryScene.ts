@@ -57,6 +57,28 @@ export class FactoryScene extends Scene {
     this.inputState = inputState;
   }
 
+  /**
+   * Center camera on hub origin
+   * Moves camera to (hubOrigin.x + 1) * TILE_SIZE, (hubOrigin.y + 1) * TILE_SIZE
+   */
+  centerCameraOnHub(): void {
+    if (!this.cameras?.main) return;
+    const camera = this.cameras.main;
+    const hubOrigin = this.world?.hubOrigin ?? { x: 31, y: 31 };
+    camera.centerOn((hubOrigin.x + 1) * TILE_SIZE, (hubOrigin.y + 1) * TILE_SIZE);
+  }
+
+  /**
+   * Check if keyboard shortcuts should be blocked due to input focus
+   * Returns true if activeElement is INPUT/TEXTAREA/SELECT
+   */
+  private isInputFocused(): boolean {
+    const activeEl = globalThis.document?.activeElement;
+    if (!activeEl) return false;
+    const tagName = activeEl.tagName?.toUpperCase();
+    return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+  }
+
   create(): void {
     // Register all procedural textures
     registerAllTextures(this);
@@ -296,6 +318,8 @@ export class FactoryScene extends Scene {
           const result = handleTileClick(this.world, this.inputState, tileX, tileY);
           if (result.success) {
             this.events.emit("worldMutated");
+          } else {
+            this.events.emit("actionFailed", result.error);
           }
         }
       }
@@ -336,6 +360,8 @@ export class FactoryScene extends Scene {
           const result = endBeltDrag(this.world, this.inputState, endTileX, endTileY);
           if (result.success) {
             this.events.emit("worldMutated");
+          } else {
+            this.events.emit("actionFailed", result.error);
           }
         }
         dragStartTile = null;
@@ -365,6 +391,8 @@ export class FactoryScene extends Scene {
 
     if (this.input.keyboard) {
       this.input.keyboard.on("keydown-R", () => {
+        // Skip if input element is focused (e.g., seed-input)
+        if (this.isInputFocused()) return;
         if (!this.inputState) return;
         this.inputState.direction = rotateDirection(this.inputState.direction);
         // Update placement ghost preview immediately with new direction
@@ -375,6 +403,8 @@ export class FactoryScene extends Scene {
       });
 
       this.input.keyboard.on("keydown-X", () => {
+        // Skip if input element is focused (e.g., seed-input)
+        if (this.isInputFocused()) return;
         if (!this.inputState) return;
         this.inputState.mode = "demolish";
         // Hide placement ghost when switching to demolish mode
@@ -387,6 +417,8 @@ export class FactoryScene extends Scene {
 
     // Camera movement with WASD
     this.events.on("update", () => {
+      // Skip camera movement if input element is focused
+      if (this.isInputFocused()) return;
       const camera = this.cameras.main;
       if (cursors?.left.isDown || aKey?.isDown) {
         camera.scrollX -= CAMERA_SPEED;
