@@ -119,12 +119,13 @@ function registerBuildingTextures(textures: Phaser.Textures.TextureManager): voi
   const faultStates = [false, true];
 
   for (const type of buildingTypes) {
+    const size = type === "hub" ? 64 : 32;
     for (const dir of directions) {
       for (const frame of frames) {
         for (const faulted of faultStates) {
           const baseKey = getBuildingTextureKey(type, dir, frame);
           const key = `${baseKey}_${faulted ? "faulted" : "ok"}`;
-          const canvas = textures.createCanvas(key, 32, 32);
+          const canvas = textures.createCanvas(key, size, size);
           if (!canvas) throw new Error(`Failed to create canvas: ${key}`);
           const ctx = canvas.getContext();
           drawBuilding(ctx, type, dir, frame, faulted);
