@@ -3,9 +3,9 @@
 
 import type { WorldState, MaterialId } from "../sim/types";
 import { getFactorySummary } from "../sim/query";
-import { getTutorialProgress, getTechTreeStatus } from "../sim/progression";
+import { getTutorialProgress, getTechTreeStatus, getMissingPrerequisites, type TechId } from "../sim/progression";
 import { getActiveQuests, getQuestProgress } from "../sim/quests";
-import { MATERIAL_CATALOG } from "../sim/catalog";
+import { MATERIAL_CATALOG, TECH_CATALOG } from "../sim/catalog";
 
 const QUEST_DURATION_TICKS = 6000;
 
@@ -176,27 +176,17 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
 
   container.appendChild(hudEl);
 
-  // Initialize tech buttons for all 8 TECH_CATALOG entries (one-time generation)
-  const techButtonMap: Record<string, { btn: HTMLButtonElement; cost: number }> = {};
-  const TECH_BUTTONS: Array<{ techId: string; label: string; cost: number }> = [
-    { techId: "filter_splitter", label: "フィルター分配機", cost: 100 },
-    { techId: "underground_belt", label: "交差ブリッジ", cost: 150 },
-    { techId: "high_efficiency", label: "高効率製錬", cost: 200 },
-    { techId: "sensor", label: "センサー", cost: 150 },
-    { techId: "recycler", label: "不純物処理炉", cost: 200 },
-    { techId: "advanced_smelting", label: "高度精錬技術", cost: 200 },
-    { techId: "electronics", label: "電子工業", cost: 300 },
-    { techId: "automation", label: "自動化研究", cost: 500 },
-  ];
-  for (const t of TECH_BUTTONS) {
+  // Initialize tech buttons for all TECH_CATALOG entries (one-time generation)
+  const techButtonMap: Record<string, { btn: HTMLButtonElement }> = {};
+  for (const [techId, tech] of Object.entries(TECH_CATALOG)) {
     const btn = doc.createElement("button");
     btn.className = "tech-btn";
-    btn.textContent = `${t.label} (アンロック)`;
-    btn.title = `${t.label} - RP コスト：${t.cost}`;
+    btn.textContent = `${tech.nameJa} (アンロック)`;
+    btn.title = `${tech.nameJa} - RP コスト：${tech.cost}`;
     btn.addEventListener("click", () => {
-      options.onUnlockTech?.(t.techId);
+      options.onUnlockTech?.(techId as keyof typeof TECH_CATALOG);
     });
-    techButtonMap[t.techId] = { btn, cost: t.cost };
+    techButtonMap[techId] = { btn };
     techTreeEl.appendChild(btn);
   }
 
@@ -274,7 +264,9 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
 
       // Update tech tree buttons non-destructively
       const unlockedTechs = new Set(world.unlockedTechs || []);
-      const allUnlocked = TECH_BUTTONS.every(t => unlockedTechs.has(t.techId));
+      
+      // Check if all techs are unlocked
+      const allUnlocked = Object.keys(TECH_CATALOG).every(techId => unlockedTechs.has(techId));
       
       if (allUnlocked) {
         // All techs unlocked - hide the tech tree container
@@ -284,37 +276,46 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
         // Non-destructive update: disable buttons and update labels/costs
         
         // Update each tech button
-        const updateTechBtn = (techId: string, isUnlocked: boolean) => {
+        const updateTechBtn = (techId: string) => {
           const entry = techButtonMap[techId];
           if (!entry) return;
-          const { btn, cost } = entry;
-          const techLabel = TECH_BUTTONS.find(t => t.techId === techId)?.label || techId;
+          const { btn } = entry;
+          const tech = TECH_CATALOG[techId];
+          if (!tech) return; // Guard against missing catalog entry
+          const cost = tech.cost;
           
-          if (isUnlocked) {
+          // Check for missing prerequisites
+          const missingPrereqs = getMissingPrerequisites(world, techId as TechId);
+          
+          if (unlockedTechs.has(techId)) {
+            // Already unlocked - hide button
             btn.disabled = true;
             btn.style.display = "none";
+          } else if (missingPrereqs.length > 0) {
+            // Prerequisites not met - disable with prerequisite message
+            btn.disabled = true;
+            btn.style.display = "";
+            const prereqLabels = missingPrereqs.map(p => TECH_CATALOG[p]?.nameJa ?? p).join(", ");
+            btn.textContent = `${tech.nameJa} (要:${prereqLabels})`;
+            btn.title = `${tech.nameJa} - 前提技術：${prereqLabels}（未解放）`;
           } else if ((world.researchPoints ?? 0) < cost) {
             // RP 不足で無効化
             btn.disabled = true;
             btn.style.display = "";
-            btn.textContent = `${techLabel} (${cost}RP - 不足)`;
-            btn.title = `${techLabel} - RP コスト：${cost}（現在：${world.researchPoints ?? 0}）`;
+            btn.textContent = `${tech.nameJa} (${cost}RP - 不足)`;
+            btn.title = `${tech.nameJa} - RP コスト：${cost}（現在：${world.researchPoints ?? 0}）`;
           } else {
             btn.disabled = false;
             btn.style.display = "";
-            btn.textContent = `${techLabel} (${cost}RP)`;
-            btn.title = `${techLabel} - RP コスト：${cost}`;
+            btn.textContent = `${tech.nameJa} (${cost}RP)`;
+            btn.title = `${tech.nameJa} - RP コスト：${cost}`;
           }
         };
         
-        updateTechBtn("filter_splitter", unlockedTechs.has("filter_splitter"));
-        updateTechBtn("underground_belt", unlockedTechs.has("underground_belt"));
-        updateTechBtn("high_efficiency", unlockedTechs.has("high_efficiency"));
-        updateTechBtn("sensor", unlockedTechs.has("sensor"));
-        updateTechBtn("recycler", unlockedTechs.has("recycler"));
-        updateTechBtn("advanced_smelting", unlockedTechs.has("advanced_smelting"));
-        updateTechBtn("electronics", unlockedTechs.has("electronics"));
-        updateTechBtn("automation", unlockedTechs.has("automation"));
+        // Update all tech buttons from TECH_CATALOG
+        for (const techId of Object.keys(TECH_CATALOG)) {
+          updateTechBtn(techId);
+        }
       }
 
       // Update active quests with material names from MATERIAL_CATALOG

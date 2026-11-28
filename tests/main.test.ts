@@ -765,6 +765,14 @@ describe("formatActionErrorJa", () => {
   it("should return default message for undefined error code", () => {
     expect(formatActionErrorJa(undefined)).toBe("操作に失敗しました");
   });
+
+  it("should return correct Japanese message for PREREQUISITE_NOT_MET", () => {
+    expect(formatActionErrorJa("PREREQUISITE_NOT_MET")).toBe("前提技術が未解放です");
+  });
+
+  it("should return correct Japanese message for INSUFFICIENT_POINTS", () => {
+    expect(formatActionErrorJa("INSUFFICIENT_POINTS")).toBe("研究ポイントが不足しています");
+  });
 });
 
 describe("initGame canvas resize sync", () => {
