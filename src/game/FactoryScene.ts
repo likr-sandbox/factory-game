@@ -282,12 +282,12 @@ export class FactoryScene extends Scene {
 
       let overlay = this.faultOverlays.get(building.id);
       if (overlay) {
-        drawFaultIndicator(overlay as unknown as import("./statusRenderer").Graphics, isHub, world.tick);
+        drawFaultIndicator(overlay, isHub, world.tick);
         overlay.setPosition(posX, posY);
         overlay.setDepth(building.y + 1);
       } else {
         overlay = this.add.graphics();
-        drawFaultIndicator(overlay as unknown as import("./statusRenderer").Graphics, isHub, world.tick);
+        drawFaultIndicator(overlay, isHub, world.tick);
         overlay.setPosition(posX, posY);
         overlay.setDepth(building.y + 1);
         this.faultOverlays.set(building.id, overlay);
@@ -325,12 +325,12 @@ export class FactoryScene extends Scene {
 
         let overlay = this.depletedOverlays.get(key);
         if (overlay) {
-          drawDepletedIndicator(overlay as unknown as import("./statusRenderer").Graphics);
+          drawDepletedIndicator(overlay);
           overlay.setPosition(posX, posY);
           overlay.setDepth(0.6);
         } else {
           overlay = this.add.graphics();
-          drawDepletedIndicator(overlay as unknown as import("./statusRenderer").Graphics);
+          drawDepletedIndicator(overlay);
           overlay.setPosition(posX, posY);
           overlay.setDepth(0.6);
           this.depletedOverlays.set(key, overlay);
@@ -340,8 +340,8 @@ export class FactoryScene extends Scene {
 
     // Sync building status overlays (progress bars, recipe/filter indicators, stall warnings)
     syncBuildingStatusOverlays(
-      this as unknown as import("./statusRenderer").Scene, 
-      this.statusOverlays as unknown as Map<string, import("./statusRenderer").Graphics>, 
+      this, 
+      this.statusOverlays, 
       world
     );
   }
