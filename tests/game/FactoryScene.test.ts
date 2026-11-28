@@ -35,6 +35,7 @@ const mockSprite = {
   setPosition: vi.fn(),
   setVisible: vi.fn(),
   setTexture: vi.fn(),
+  setScale: vi.fn(),
 };
 
 vi.mock("phaser", () => {
