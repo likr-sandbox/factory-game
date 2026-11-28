@@ -8,6 +8,7 @@ import type { WorldState, ActionResult } from "./sim/types";
 import { stepTick } from "./sim/engine";
 import { createPhaserConfig } from "./game/config";
 import { FactoryScene } from "./game/FactoryScene";
+import { mountMinimap } from "./game/minimap";
 import { createInputState, type InputState, repairBuilding, applyRecipe } from "./game/input";
 import { setRecipe } from "./sim/actions";
 import { mountHud, type HudHandle } from "./ui/hud";
@@ -37,6 +38,7 @@ let hud: HudHandle | null = null;
 let paletteBar: PaletteBarHandle | null = null;
 let inspector: InspectorHandle | null = null;
 let webmcpHandle: WebMcpHandle | null = null;
+let minimapHandle: ReturnType<typeof mountMinimap> | null = null;
 
 // Input state
 let inputState: InputState = createInputState();
@@ -112,6 +114,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
   const hudContainer = doc.getElementById("hud-container");
   const paletteContainer = doc.getElementById("palette-container");
   const webmcpContainer = doc.getElementById("webmcp-container");
+  const minimapContainer = doc.getElementById("minimap-container");
 
   if (!gameContainer) {
     throw new Error("Required DOM element #game-container not found");
@@ -169,6 +172,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
+      minimapHandle?.update(activeWorld);
       scene?.centerCameraOnHub();
     },
   });
@@ -261,11 +265,23 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
+      minimapHandle?.update(activeWorld);
     },
     env: { document: doc as unknown as { modelContext?: ModelContextLike }, navigator: (globalThis as unknown as { navigator?: { modelContext?: ModelContextLike } }).navigator },
   });
 
   mountWebMcpPanel(webmcpContainer, webmcpHandle);
+
+  // Mount minimap if container exists
+  if (minimapContainer) {
+    minimapHandle = mountMinimap(minimapContainer, {
+      onNavigate: (tileX, tileY) => {
+        // Center camera on the clicked tile
+        scene?.centerCameraOnTile(tileX, tileY);
+      },
+      visible: true,
+    });
+  }
 
   // Create Phaser game instance
   const phaserGame = new Phaser.Game(createPhaserConfig("game-container", scene));
@@ -311,6 +327,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     hud?.update(activeWorld);
     paletteBar?.sync(activeWorld, inputState);
     inspector?.update(activeWorld, inputState.inspectedCoord);
+    minimapHandle?.update(activeWorld);
     paletteBar?.setFeedback(null); // Clear feedback on successful mutation
   });
 
@@ -342,6 +359,9 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     }
     if (inspector) {
       inspector.update(activeWorld, inputState.inspectedCoord);
+    }
+    if (minimapHandle) {
+      minimapHandle.update(activeWorld);
     }
 
     requestAnimationFrame(gameLoop);
