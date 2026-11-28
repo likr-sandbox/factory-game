@@ -41,6 +41,7 @@ html, body {
   justify-content: center;
   overflow: hidden;
   background-color: var(--bg-medium);
+  position: relative;
 }
 
 #game-container canvas {
@@ -127,6 +128,25 @@ html, body {
 .palette-feedback {
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.palette-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.palette-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+
+.palette-label {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .palette-btn.locked {
@@ -427,4 +447,86 @@ html, body {
 
 .seed-input:focus {
   border-color: var(--accent-color);
+}
+
+/* ============================================================================
+   Minimap Styles
+   ============================================================================ */
+
+.minimap-container {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  z-index: 100;
+  background-color: var(--panel-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.minimap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.minimap-toggle-btn {
+  padding: 4px 10px;
+  background-color: var(--bg-medium);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.minimap-toggle-btn:hover {
+  background-color: var(--border-color);
+}
+
+.minimap-toggle-btn:active {
+  background-color: var(--accent-color);
+}
+
+.minimap-canvas {
+  display: block;
+  border-radius: 4px;
+  cursor: crosshair;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  image-rendering: -moz-crisp-edges;
+}
+
+.minimap-container:hover .minimap-canvas {
+  border: 1px solid var(--border-color);
+}
+
+/* Minimap legend */
+.minimap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.minimap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.minimap-legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }

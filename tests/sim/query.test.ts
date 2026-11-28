@@ -373,15 +373,38 @@ describe("Query Functions", () => {
       const world = createWorld(999);
 
       // Find a valid iron_ore deposit position for the miner
-      const resources = findResources(world, { material: "iron_ore", limit: 1 });
+      // where (x+1, y) and (x+2, y) are in-bounds grass tiles with buildingId === null
+      const resources = findResources(world, { material: "iron_ore", limit: 20 });
       expect(resources.length).toBeGreaterThan(0);
-      const minerPos = resources[0]!;
+      
+      let minerPos: { x: number; y: number } | null = null;
+      for (const resource of resources) {
+        const beltX = resource.x + 1;
+        const smelterX = resource.x + 2;
+        
+        // Check in-bounds
+        if (beltX >= world.width || smelterX >= world.width) continue;
+        
+        // Check belt position is grass with no building
+        const beltTile = world.tiles[resource.y]?.[beltX];
+        if (!beltTile || beltTile.terrain !== "grass" || beltTile.buildingId !== null) continue;
+        
+        // Check smelter position is grass with no building
+        const smelterTile = world.tiles[resource.y]?.[smelterX];
+        if (!smelterTile || smelterTile.terrain !== "grass" || smelterTile.buildingId !== null) continue;
+        
+        minerPos = { x: resource.x, y: resource.y };
+        break;
+      }
+      
+      expect(minerPos).not.toBeNull();
+      const pos = minerPos!;
 
       // Setup: Place a simple production line
       // Miner at deposit position facing East
       const minerResult = placeBuilding(world, {
-        x: minerPos.x,
-        y: minerPos.y,
+        x: pos.x,
+        y: pos.y,
         type: "miner",
         direction: "E",
       });
@@ -389,8 +412,8 @@ describe("Query Functions", () => {
 
       // Belt next to miner
       const beltResult = placeBuilding(world, {
-        x: minerPos.x + 1,
-        y: minerPos.y,
+        x: pos.x + 1,
+        y: pos.y,
         type: "belt",
         direction: "E",
       });
@@ -398,8 +421,8 @@ describe("Query Functions", () => {
 
       // Smelter at (minerPos.x + 2, minerPos.y) 
       const smelterResult = placeBuilding(world, {
-        x: minerPos.x + 2,
-        y: minerPos.y,
+        x: pos.x + 2,
+        y: pos.y,
         type: "smelter",
         direction: "S",
         recipeId: "iron_plate",
@@ -416,8 +439,8 @@ describe("Query Functions", () => {
 
       // Inspect the region around our production line (around miner position)
       const region = inspectRegion(world, { 
-        x: Math.max(0, minerPos.x - 2), 
-        y: Math.max(0, minerPos.y - 2), 
+        x: Math.max(0, pos.x - 2), 
+        y: Math.max(0, pos.y - 2), 
         width: 10, 
         height: 10 
       });

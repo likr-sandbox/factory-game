@@ -3,33 +3,128 @@
 
 import type { WorldState, ActiveQuestState, MaterialId, RecipeId } from "./types";
 import { nextRandom } from "./world";
-import { RECIPE_CATALOG } from "./catalog";
+import { QUEST_CATALOG, RECIPE_CATALOG, type QuestEntry } from "./catalog";
 import { isRecipeUnlocked } from "./progression";
 import { QUEST_DURATION_TICKS } from "./constants";
 export { QUEST_DURATION_TICKS };
 
-// Quest templates covering required recipes: iron_plate, copper_plate, iron_gear, copper_wire, circuit_board, microchip, automation_module
-interface QuestTemplate {
-  id: string;
-  nameJa: string;
-  deliver: Partial<Record<MaterialId, number>>;
+export const MAX_ACTIVE_QUESTS = 3;
+
+// Extended quest state with catalog-based design
+interface DynamicQuestState extends ActiveQuestState {
+  questCatalogId: string;
+  targets: Record<string, number>;
   rewardPoints: number;
 }
 
-const QUEST_TEMPLATES: QuestTemplate[] = [
-  { id: "delivery_iron_plate", nameJa: "鉄板納品ミッション", deliver: { iron_plate: 15 }, rewardPoints: 50 },
-  { id: "delivery_copper_plate", nameJa: "銅板納品ミッション", deliver: { copper_plate: 15 }, rewardPoints: 50 },
-  { id: "delivery_iron_gear", nameJa: "鉄歯車納品ミッション", deliver: { iron_gear: 8 }, rewardPoints: 80 },
-  { id: "delivery_copper_wire", nameJa: "銅線納品ミッション", deliver: { copper_wire: 12 }, rewardPoints: 80 },
-  { id: "delivery_circuit_board", nameJa: "電子基板納品ミッション", deliver: { circuit_board: 5 }, rewardPoints: 120 },
-  { id: "delivery_microchip", nameJa: "マイクロチップ納品ミッション", deliver: { microchip: 3 }, rewardPoints: 180 },
-  { id: "delivery_automation_module", nameJa: "自動化モジュール納品ミッション", deliver: { automation_module: 2 }, rewardPoints: 250 },
-];
+/**
+ * Calculate scaled target amount and reward points based on progression.
+ * scale = 1 + (unlockedTechs.length * 0.25) + (tutorialPhase * 0.25)
+ */
+function calculateScaledValues(baseAmount: number, baseReward: number, world: WorldState): { target: number; reward: number } {
+  const techCount = world.unlockedTechs?.length ?? 0;
+  const phase = world.tutorialPhase ?? 0;
+  const scale = 1 + techCount * 0.25 + phase * 0.25;
+  
+  return {
+    target: Math.round(baseAmount * scale),
+    reward: Math.round(baseReward * scale),
+  };
+}
 
-export const MAX_ACTIVE_QUESTS = 3;
+/**
+ * Get eligible quest entries based on unlocked recipes and active quest materials.
+ * Filters out entries for locked recipes and materials already requested by active quests.
+ */
+function getEligibleQuestEntries(world: WorldState): QuestEntry[] {
+  // Build set of materials currently requested by active quests
+  const activeMaterials = new Set<MaterialId>();
+  for (const quest of world.activeQuests || []) {
+    const dynQuest = quest as DynamicQuestState;
+    for (const material of Object.keys(dynQuest.targets || {})) {
+      activeMaterials.add(material as MaterialId);
+    }
+  }
 
-interface ExtendedActiveQuestState extends ActiveQuestState {
-  templateIndex: number;
+  const eligibleEntries: QuestEntry[] = [];
+  
+  for (const entry of Object.values(QUEST_CATALOG)) {
+    // Skip if no deliverable items
+    if (!entry.deliver || Object.keys(entry.deliver).length === 0) {
+      continue;
+    }
+
+    const material = Object.keys(entry.deliver)[0] as MaterialId;
+    
+    // Check if this material is already requested by an active quest
+    if (activeMaterials.has(material)) {
+      continue;
+    }
+    
+    // Check if recipe exists and is unlocked
+    if (!(material in RECIPE_CATALOG)) {
+      continue;
+    }
+    
+    const recipeId = material as RecipeId;
+    if (!isRecipeUnlocked(world, recipeId)) {
+      continue;
+    }
+    
+    eligibleEntries.push(entry);
+  }
+  
+  return eligibleEntries;
+}
+
+/**
+ * Select a quest entry using weighted random based on phase.
+ * When unlockedTechs.length > 0 or tutorialPhase >= 2, higher phase entries get higher weight.
+ */
+function selectQuestEntry(eligibleEntries: QuestEntry[], world: WorldState): QuestEntry | null {
+  if (eligibleEntries.length === 0) {
+    return null;
+  }
+  
+  // Single entry - no need to randomize
+  if (eligibleEntries.length === 1) {
+    return eligibleEntries[0]!;
+  }
+  
+  const { value: randVal, nextState } = nextRandom(world.rngState);
+  world.rngState = nextState;
+  
+  const techCount = world.unlockedTechs?.length ?? 0;
+  const phase = world.tutorialPhase ?? 0;
+  
+  // Weighted selection when progression has advanced
+  if (techCount > 0 || phase >= 2) {
+    // Calculate weights: higher phase = higher weight
+    const entriesWithWeights = eligibleEntries.map(entry => ({
+      entry,
+      weight: entry.phase,
+    }));
+    
+    const totalWeight = entriesWithWeights.reduce((sum, e) => sum + e.weight, 0);
+    
+    // Select based on cumulative weight
+    let cumulative = 0;
+    const threshold = randVal * totalWeight;
+    
+    for (const item of entriesWithWeights) {
+      cumulative += item.weight;
+      if (threshold <= cumulative) {
+        return item.entry;
+      }
+    }
+    
+    // Fallback to last entry (should never reach here)
+    return entriesWithWeights[entriesWithWeights.length - 1]?.entry ?? null;
+  }
+  
+  // Uniform random selection for early game
+  const index = Math.floor(randVal * eligibleEntries.length);
+  return eligibleEntries[index]!;
 }
 
 export function generateDynamicQuest(world: WorldState): ActiveQuestState | null {
@@ -37,65 +132,43 @@ export function generateDynamicQuest(world: WorldState): ActiveQuestState | null
     return null;
   }
 
-  // Build set of materials currently requested by active quests
-  const activeMaterials = new Set<MaterialId>();
-  for (const quest of world.activeQuests || []) {
-    const extQuest = quest as ExtendedActiveQuestState;
-    for (const material of Object.keys(quest.progress)) {
-      activeMaterials.add(material as MaterialId);
-    }
-  }
-
-  // Filter templates to only include those that:
-  // 1. Have at least one deliverable material that has a corresponding unlocked recipe
-  // 2. Don't duplicate materials already requested by active quests
-  const validTemplates = QUEST_TEMPLATES.filter((template) => {
-    const material = Object.keys(template.deliver)[0] as MaterialId;
-    
-    // Check if this material is already requested by an active quest
-    if (!material || activeMaterials.has(material)) {
-      return false;
-    }
-    
-    // Check if there's a recipe for this material and if it's unlocked
-    // Note: Not all materials have recipes (e.g., raw materials like iron_ore)
-    if (!(material in RECIPE_CATALOG)) {
-      return false;
-    }
-    
-    // Type assertion safe because we checked the key exists in RECIPE_CATALOG
-    const recipeId = material as RecipeId;
-    if (!isRecipeUnlocked(world, recipeId)) {
-      return false;
-    }
-    
-    return true;
-  });
-
-  // If no valid templates available, return null
-  if (validTemplates.length === 0) {
+  const eligibleEntries = getEligibleQuestEntries(world);
+  
+  if (eligibleEntries.length === 0) {
     return null;
   }
-
-  const { value: randVal, nextState } = nextRandom(world.rngState);
-  world.rngState = nextState;
-
-  // Select from valid templates only
-  const templateIndexInValid = Math.floor(randVal * validTemplates.length);
-  const selectedTemplate = validTemplates[templateIndexInValid]!;
   
-  // Find the original index in QUEST_TEMPLATES for tracking
-  const originalTemplateIndex = QUEST_TEMPLATES.indexOf(selectedTemplate);
-
-  const questState: ExtendedActiveQuestState = {
+  const selectedEntry = selectQuestEntry(eligibleEntries, world);
+  
+  if (!selectedEntry) {
+    return null;
+  }
+  
+  // Calculate scaled values based on progression
+  const baseAmount = selectedEntry.deliver ? Object.values(selectedEntry.deliver)[0] ?? 0 : 0;
+  const baseReward = selectedEntry.rewardPoints;
+  const { target, reward } = calculateScaledValues(baseAmount, baseReward, world);
+  
+  // Build targets object with scaled values
+  const targets: Record<string, number> = {};
+  if (selectedEntry.deliver) {
+    for (const [material, baseQty] of Object.entries(selectedEntry.deliver)) {
+      targets[material] = Math.round(baseQty * (target / baseAmount));
+    }
+  }
+  
+  const questState: DynamicQuestState = {
     questId: `quest_${world.nextQuestId ?? 0}`,
     stepIndex: 0,
     progress: {},
     startedAtTick: world.tick,
-    templateIndex: originalTemplateIndex,
+    questCatalogId: selectedEntry.id,
+    targets,
+    rewardPoints: reward,
   };
-
-  for (const material of Object.keys(selectedTemplate.deliver)) {
+  
+  // Initialize progress for each target material
+  for (const material of Object.keys(targets)) {
     questState.progress[material] = 0;
   }
 
@@ -115,12 +188,14 @@ export function updateQuestProgress(
   let updated = false;
 
   for (const quest of activeQuests) {
-    const extQuest = quest as ExtendedActiveQuestState;
-    const template = QUEST_TEMPLATES[extQuest.templateIndex];
+    const dynQuest = quest as DynamicQuestState;
     
-    if (!template) continue;
+    // Fail-fast: throw error if targets is missing
+    if (!dynQuest.targets) {
+      throw new Error(`Quest ${quest.questId} is missing targets field`);
+    }
     
-    const targetAmount = template.deliver[material] ?? 0;
+    const targetAmount = dynQuest.targets[material] ?? 0;
     if (targetAmount <= 0) continue;
 
     const currentProgress = quest.progress[material] ?? 0;
@@ -141,7 +216,6 @@ export function processQuests(world: WorldState): void {
   const remaining: ActiveQuestState[] = [];
 
   for (const quest of activeQuests) {
-    const extQuest = quest as ExtendedActiveQuestState;
     const expired = world.tick - quest.startedAtTick >= QUEST_DURATION_TICKS;
     const completed = isQuestComplete(quest);
 
@@ -170,17 +244,25 @@ export function completeQuest(world: WorldState, quest: ActiveQuestState): void 
     world.completedQuests.push(quest.questId);
   }
 
-  const extQuest = quest as ExtendedActiveQuestState;
-  const template = QUEST_TEMPLATES[extQuest.templateIndex];
-  if (template) {
-    world.researchPoints = (world.researchPoints ?? 0) + template.rewardPoints;
+  const dynQuest = quest as DynamicQuestState;
+  
+  // Fail-fast: throw error if rewardPoints is missing
+  if (dynQuest.rewardPoints === undefined) {
+    throw new Error(`Quest ${quest.questId} is missing rewardPoints field`);
   }
+  
+  world.researchPoints = (world.researchPoints ?? 0) + dynQuest.rewardPoints;
 }
 
 export function awardResearchPoints(world: WorldState, quest: ActiveQuestState): number {
-  const extQuest = quest as ExtendedActiveQuestState;
-  const template = QUEST_TEMPLATES[extQuest.templateIndex];
-  const points = template?.rewardPoints ?? 0;
+  const dynQuest = quest as DynamicQuestState;
+  
+  // Fail-fast: throw error if rewardPoints is missing
+  if (dynQuest.rewardPoints === undefined) {
+    throw new Error(`Quest ${quest.questId} is missing rewardPoints field`);
+  }
+  
+  const points = dynQuest.rewardPoints;
   world.researchPoints = (world.researchPoints ?? 0) + points;
   return points;
 }
@@ -194,15 +276,15 @@ export function isQuestExpired(world: WorldState, quest: ActiveQuestState): bool
 }
 
 export function isQuestComplete(quest: ActiveQuestState): boolean {
-  const extQuest = quest as ExtendedActiveQuestState;
-  const template = QUEST_TEMPLATES[extQuest.templateIndex];
+  const dynQuest = quest as DynamicQuestState;
   
-  if (!template || !template.deliver) {
-    return false;
+  // Fail-fast: throw error if targets is missing
+  if (!dynQuest.targets) {
+    throw new Error(`Quest ${quest.questId} is missing targets field`);
   }
 
-  for (const material of Object.keys(template.deliver)) {
-    const targetAmount = template.deliver[material as MaterialId] ?? 0;
+  for (const material of Object.keys(dynQuest.targets)) {
+    const targetAmount = dynQuest.targets[material] ?? 0;
     const currentProgress = quest.progress[material] ?? 0;
     if (currentProgress < targetAmount) {
       return false;
@@ -213,15 +295,15 @@ export function isQuestComplete(quest: ActiveQuestState): boolean {
 
 export function getQuestProgress(quest: ActiveQuestState): Record<string, { current: number; target: number }> {
   const result: Record<string, { current: number; target: number }> = {};
-  const extQuest = quest as ExtendedActiveQuestState;
-  const template = QUEST_TEMPLATES[extQuest.templateIndex];
-
-  if (!template) {
-    return result;
+  const dynQuest = quest as DynamicQuestState;
+  
+  // Fail-fast: throw error if targets is missing
+  if (!dynQuest.targets) {
+    throw new Error(`Quest ${quest.questId} is missing targets field`);
   }
 
-  for (const material of Object.keys(template.deliver)) {
-    const targetAmount = template.deliver[material as MaterialId] ?? 0;
+  for (const material of Object.keys(dynQuest.targets)) {
+    const targetAmount = dynQuest.targets[material] ?? 0;
     result[material] = {
       current: quest.progress[material] ?? 0,
       target: targetAmount,
