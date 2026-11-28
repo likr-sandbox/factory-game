@@ -62,6 +62,11 @@ export function canAcceptItem(building: BuildingState, material: MaterialId): bo
     return current < limit;
   }
 
+  // Recyclers only accept slag
+  if (building.type === "recycler") {
+    return material === "slag" && countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
+  }
+
   // Other buffer buildings check total count
   return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
 }
@@ -159,7 +164,25 @@ export function transferItem(
     return actualTransfer;
   }
 
-  // For splitter, filter_splitter, hub, underground_belt, recycler
+  // Recyclers only accept slag (already checked by canAcceptItem)
+  if (targetBuilding.type === "recycler") {
+    if (material !== "slag") {
+      return 0;
+    }
+    const currentTotal = countBufferItems(targetBuilding.inputBuffer);
+    if (currentTotal >= MAX_OUTPUT_BUFFER) {
+      return 0;
+    }
+    const sourceAmount = sourceBuffer[material] || 0;
+    const actualTransfer = Math.min(maxAmount, sourceAmount, MAX_OUTPUT_BUFFER - currentTotal);
+    if (actualTransfer > 0) {
+      sourceBuffer[material] = sourceAmount - actualTransfer;
+      addToBuffer(targetBuilding.inputBuffer, material, actualTransfer);
+    }
+    return actualTransfer;
+  }
+
+  // For splitter, filter_splitter, hub, underground_belt
   const currentTotal = countBufferItems(targetBuilding.inputBuffer);
   if (currentTotal >= MAX_OUTPUT_BUFFER) {
     return 0;
