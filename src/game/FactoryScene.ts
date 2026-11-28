@@ -12,15 +12,17 @@ import {
   endBeltDrag,
   rotateDirection,
   createInputState,
+  computeBeltPreviewPath,
+  canPlaceBuildingAt,
 } from "./input";
 import { UI_PALETTE } from "./palette";
-import { PlacementGhost } from "./overlays";
+import { PlacementGhost, BeltDragPreview, ModeOverlay } from "./overlays";
 
 export const TILE_SIZE = 32;
 
 const CAMERA_SPEED = 5;
 const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 2;
+const ZOOM_MAX = 2.5;
 const ZOOM_SENSITIVITY = 0.1;
 
 export class FactoryScene extends Scene {
@@ -37,6 +39,10 @@ export class FactoryScene extends Scene {
   private depletedOverlays: Map<string, GameObjects.Graphics> = new Map();
   // Placement ghost preview
   private placementGhost: PlacementGhost | null = null;
+  // Belt drag preview
+  private beltDragPreview: BeltDragPreview | null = null;
+  // Mode overlay (grid, hover, selection frames)
+  private modeOverlay: ModeOverlay | null = null;
 
   constructor() {
     super("FactoryScene");
@@ -69,6 +75,41 @@ export class FactoryScene extends Scene {
   }
 
   /**
+   * Center camera on a specific tile
+   * @param tx - Tile X coordinate
+   * @param ty - Tile Y coordinate
+   */
+  centerCameraOnTile(tx: number, ty: number): void {
+    if (!this.cameras?.main) return;
+    const camera = this.cameras.main;
+    camera.centerOn(tx * TILE_SIZE + TILE_SIZE / 2, ty * TILE_SIZE + TILE_SIZE / 2);
+  }
+
+  /**
+   * Get the current camera viewport bounds in world coordinates
+   * @returns Object with left, right, top, bottom, width, height in tiles
+   */
+  getCameraViewport(): { left: number; right: number; top: number; bottom: number; width: number; height: number } {
+    if (!this.cameras?.main) {
+      return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
+    }
+    const camera = this.cameras.main;
+    const zoom = camera.zoom || 1;
+    const left = Math.floor(camera.scrollX / TILE_SIZE);
+    const top = Math.floor(camera.scrollY / TILE_SIZE);
+    const right = Math.ceil((camera.scrollX + (camera.width || 0) / zoom) / TILE_SIZE);
+    const bottom = Math.ceil((camera.scrollY + (camera.height || 0) / zoom) / TILE_SIZE);
+    return {
+      left,
+      right,
+      top,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+    };
+  }
+
+  /**
    * Check if keyboard shortcuts should be blocked due to input focus
    * Returns true if activeElement is INPUT/TEXTAREA/SELECT
    */
@@ -94,6 +135,10 @@ export class FactoryScene extends Scene {
 
     // Initialize placement ghost
     this.placementGhost = new PlacementGhost(this);
+    // Initialize belt drag preview
+    this.beltDragPreview = new BeltDragPreview(this);
+    // Initialize mode overlay
+    this.modeOverlay = new ModeOverlay(this);
 
     // Sync the initial world state now that Phaser is ready
     if (this.world) {
@@ -317,6 +362,11 @@ export class FactoryScene extends Scene {
           }
           const result = handleTileClick(this.world, this.inputState, tileX, tileY);
           if (result.success) {
+            // Immediately update mode overlay selection frame in inspect mode
+            if (this.inputState.mode === "inspect" && this.modeOverlay && this.inputState.inspectedCoord) {
+              this.modeOverlay.setMode("inspect");
+              this.modeOverlay.setSelectedTile(this.inputState.inspectedCoord.x, this.inputState.inspectedCoord.y);
+            }
             this.events.emit("worldMutated");
           } else {
             this.events.emit("actionFailed", result.error);
@@ -329,8 +379,9 @@ export class FactoryScene extends Scene {
       if (this.cameraPanStart && this.lastMousePos) {
         const dx = pointer.x - this.lastMousePos.x;
         const dy = pointer.y - this.lastMousePos.y;
-        camera.scrollX += dx * CAMERA_SPEED;
-        camera.scrollY += dy * CAMERA_SPEED;
+        // 1:1 natural follow: move camera in opposite direction by dx / zoom
+        camera.scrollX -= dx / camera.zoom;
+        camera.scrollY -= dy / camera.zoom;
         this.lastMousePos = { x: pointer.x, y: pointer.y };
       }
 
@@ -341,9 +392,40 @@ export class FactoryScene extends Scene {
 
       // Update placement ghost preview when in place mode with a selected building
       if (this.inputState?.mode === "place" && this.inputState.selectedBuilding && this.placementGhost) {
-        this.placementGhost.update(tileX, tileY, this.inputState.selectedBuilding, this.inputState.direction);
+        const canPlace = this.world ? canPlaceBuildingAt(this.world, this.inputState, tileX, tileY) : { success: false };
+        this.placementGhost.update(tileX, tileY, this.inputState.selectedBuilding, this.inputState.direction, canPlace.success);
       } else if (this.placementGhost) {
         this.placementGhost.hide();
+      }
+
+      // Sync mode overlay mode with current input state
+      if (this.modeOverlay) {
+        this.modeOverlay.setMode(this.inputState?.mode ?? "place");
+      }
+
+      // Update mode overlay for demolish/inspect modes
+      if (this.modeOverlay) {
+        if (this.inputState?.mode === "demolish") {
+          this.modeOverlay.setHoveredTile(tileX, tileY);
+        } else if (this.inputState?.mode === "inspect") {
+          this.modeOverlay.setHoveredTile(null, null); // Clear hover in inspect mode
+          if (this.inputState.inspectedCoord) {
+            this.modeOverlay.setSelectedTile(this.inputState.inspectedCoord.x, this.inputState.inspectedCoord.y);
+          } else {
+            this.modeOverlay.setSelectedTile(null, null);
+          }
+        } else {
+          this.modeOverlay.setHoveredTile(null, null);
+          this.modeOverlay.setSelectedTile(null, null);
+        }
+      }
+
+      // Show belt drag preview when dragging a belt
+      if (this.inputState?.isDraggingBelt && this.beltDragPreview && this.world && dragStartTile) {
+        const pathResult = computeBeltPreviewPath(this.world, dragStartTile.x, dragStartTile.y, tileX, tileY);
+        this.beltDragPreview.show(dragStartTile.x, dragStartTile.y, tileX, tileY, pathResult.path);
+      } else if (this.beltDragPreview) {
+        this.beltDragPreview.hide();
       }
     });
 
@@ -363,6 +445,10 @@ export class FactoryScene extends Scene {
           } else {
             this.events.emit("actionFailed", result.error);
           }
+        }
+        // Hide belt drag preview
+        if (this.beltDragPreview) {
+          this.beltDragPreview.hide();
         }
         dragStartTile = null;
       }
@@ -395,9 +481,10 @@ export class FactoryScene extends Scene {
         if (this.isInputFocused()) return;
         if (!this.inputState) return;
         this.inputState.direction = rotateDirection(this.inputState.direction);
-        // Update placement ghost preview immediately with new direction
+        // Update placement ghost preview immediately with new direction and validity check
         if (this.placementGhost && this.inputState.mode === "place" && this.inputState.selectedBuilding && this.lastHoveredTile) {
-          this.placementGhost.update(this.lastHoveredTile.x, this.lastHoveredTile.y, this.inputState.selectedBuilding, this.inputState.direction);
+          const canPlace = this.world ? canPlaceBuildingAt(this.world, this.inputState, this.lastHoveredTile.x, this.lastHoveredTile.y).success : false;
+          this.placementGhost.update(this.lastHoveredTile.x, this.lastHoveredTile.y, this.inputState.selectedBuilding, this.inputState.direction, canPlace);
         }
         this.events.emit("worldMutated");
       });
@@ -411,7 +498,17 @@ export class FactoryScene extends Scene {
         if (this.placementGhost) {
           this.placementGhost.hide();
         }
+        // Update mode overlay
+        if (this.modeOverlay) {
+          this.modeOverlay.setMode("demolish");
+        }
         this.events.emit("worldMutated");
+      });
+
+      this.input.keyboard.on("keydown-H", () => {
+        // Skip if input element is focused (e.g., seed-input)
+        if (this.isInputFocused()) return;
+        this.centerCameraOnHub();
       });
     }
 
