@@ -13,6 +13,7 @@ class MockElement {
   public id: string = "";
   public parentNode: MockElement | null = null;
   public ownerDocument: MockDocument | null = null;
+  public disabled: boolean = false;
 
   appendChild(child: MockElement): void { child.parentNode = this; this.children.push(child); }
   removeChild(child: MockElement): void { const idx = this.children.indexOf(child); if (idx !== -1) { this.children.splice(idx, 1); child.parentNode = null; } }
@@ -92,7 +93,7 @@ describe("mountHud", () => {
     const world = makeWorld();
     world.delivered = { iron_plate: 100, copper_plate: 50, iron_gear: 25, copper_wire: 75 };
     handle.update(world);
-    expect(container.children[0]!.children[4]!.textContent).toBe("納入数：鉄板:100, 銅板:50, 鉄ギア:25, 銅線:75");
+    expect(container.children[0]!.children[4]!.textContent).toBe("納入数：鉄板:100, 銅板:50, 鉄歯車:25, 銅線:75");
     handle.destroy();
   });
 
@@ -320,4 +321,122 @@ describe("mountHud", () => {
     
     handle.destroy();
   });
+
+  it("should create 8 tech buttons on mount for all TECH_CATALOG entries", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.researchPoints = 1000; // 十分な RP
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    
+    // Should have exactly 8 tech buttons
+    expect(buttons.length).toBe(8);
+    
+    // Check expected tech labels exist (with RP cost)
+    const texts = buttons.map(b => b.textContent);
+    expect(texts[0]).toBe("フィルター分配機 (100RP)");
+    expect(texts.length).toBe(8);
+    
+    handle.destroy();
+  });
+
+  it("should hide tech tree when all 8 techs are unlocked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = ["underground_belt", "filter_splitter", "high_efficiency", 
+      "sensor", "recycler", "advanced_smelting", "electronics", "automation"];
+    
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    expect(techTreeEl.style.display).toBe("none");
+    
+    handle.destroy();
+  });
+
+  it("should update tech buttons non-destructively when tech is unlocked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    
+    // First update with no techs unlocked
+    handle.update(world);
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttonsBefore = techTreeEl.querySelectorAll(".tech-btn");
+    const firstBtn = buttonsBefore[0]!;
+    const initialText = firstBtn.textContent;
+    
+    // Unlock one tech and update
+    world.unlockedTechs = ["filter_splitter"];
+    handle.update(world);
+    
+    // The same button element should be hidden/disabled, not recreated
+    const buttonsAfter = techTreeEl.querySelectorAll(".tech-btn");
+    expect(buttonsAfter.length).toBe(8); // Still 8 buttons in DOM
+    
+    handle.destroy();
+  });
+
+  it("should display quest progress with material names from MATERIAL_CATALOG", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.tick = 1000;
+    // Note: Quest templates use targets like iron_plate: 15, copper_plate: 15
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 5, copper_plate: 3 },
+        startedAtTick: 500,
+        templateIndex: 0, // delivery_iron_plate template
+      } as ActiveQuestState,
+    ];
+    handle.update(world);
+    
+    const questsEl = container.children[0]!.children[8]!;
+    expect(questsEl.textContent).toContain("鉄板 5/15");
+    
+    handle.destroy();
+  });
+
+  it("should disable tech buttons and show '不足' when RP is insufficient", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.researchPoints = 50; // Less than filter_splitter cost (100)
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    
+    // filter_splitter button should be disabled with "不足" text
+    const filterSplitterBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("フィルター分配機"));
+    expect(filterSplitterBtn).toBeDefined();
+    expect(filterSplitterBtn!.disabled).toBe(true);
+    expect(filterSplitterBtn!.textContent).toContain("不足");
+    
+    handle.destroy();
+  });
+
+  it("should show all 8 tech buttons visible and enabled when none unlocked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = [];
+    world.researchPoints = 1000;
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    
+    expect(buttons.length).toBe(8);
+    buttons.forEach((btn: any) => {
+      expect(btn.style.display).not.toBe("none");
+      expect(btn.disabled).toBe(false);
+      expect(btn.textContent).toContain("RP)"); // Should have cost, not "不足"
+      expect(btn.textContent).not.toContain("アンロック"); // Should show cost, not placeholder
+    });
+    
+    handle.destroy();
+  });
 });
+

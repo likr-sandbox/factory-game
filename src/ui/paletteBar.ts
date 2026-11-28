@@ -20,7 +20,7 @@ export interface PaletteBarHandle {
 const BUILDING_LABELS: Record<string, string> = {
   miner: "採掘機", belt: "コンベア", splitter: "分配器",
   filter_splitter: "フィルター分配機", underground_belt: "交差ブリッジ",
-  smelter: "精錬炉", assembler: "組立機", recycler: "不純物処理炉", sensor: "センサー",
+  smelter: "溶鉱炉", assembler: "組立機", recycler: "不純物処理炉", sensor: "センサー",
 };
 
 const ACTION_LABELS = {
