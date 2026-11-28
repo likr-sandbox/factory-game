@@ -231,8 +231,8 @@ export function drawFaultBadge64(ctx: CanvasRenderingContext2D): void {
   const y = 4;
   const scale = 2;
 
-  // Outer warning triangle (orange) - scaled
-  const size = 24 * scale;
+  // Outer warning triangle (orange) - scaled (12 * 2 = 24)
+  const size = 12 * scale;
   fill(ctx, x, y, size, 20, warnColor);
   fill(ctx, x + 2, y + 2, size - 4, 16, warnColor);
 
