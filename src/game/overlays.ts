@@ -65,6 +65,9 @@ export class PlacementGhost {
 
     // Draw direction arrow emphasis
     this.drawDirectionArrow(direction, x, y, size, valid);
+    
+    // Ensure graphics are visible
+    this.graphics.setVisible(true);
   }
 
   /**
@@ -367,11 +370,12 @@ export class ModeOverlay {
     const camera = this.scene.cameras?.main;
     if (!camera) return;
 
-    // Get visible area bounds in world coordinates
+    // Get visible area bounds in world coordinates (account for camera zoom)
+    const zoom = camera.zoom || 1;
     const left = Math.floor(camera.scrollX / TILE_SIZE);
     const top = Math.floor(camera.scrollY / TILE_SIZE);
-    const right = Math.ceil((camera.scrollX + camera.width) / TILE_SIZE);
-    const bottom = Math.ceil((camera.scrollY + camera.height) / TILE_SIZE);
+    const right = Math.ceil((camera.scrollX + camera.width / zoom) / TILE_SIZE);
+    const bottom = Math.ceil((camera.scrollY + camera.height / zoom) / TILE_SIZE);
 
     this.graphics.lineStyle(1, 0xFFFFFF, 0.15);
 
