@@ -173,7 +173,7 @@ export function drawSmelter(ctx: CanvasRenderingContext2D, dir: Direction, frame
   ctx.fillStyle = "rgba(100, 100, 100, 0.5)";
   const smokePhase = frame === 0 ? 0 : 2;
   fill(ctx, 14 + smokePhase, 0, 2, 2, "rgba(100, 100, 100, 0.5)");
-  fill(ctx, 18 - smokePhase, -1, 2, 2, "rgba(100, 100, 100, 0.4)");
+  fill(ctx, 18 - smokePhase, 0, 2, 2, "rgba(100, 100, 100, 0.4)");
 
   // Direction chevron
   drawDirectionChevron(ctx, dir, SMELTER_HIGHLIGHT, FLAME_YELLOW);

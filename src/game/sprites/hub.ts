@@ -27,6 +27,11 @@ function drawEnergyCore(ctx: CanvasRenderingContext2D, frame: number): void {
   const centerX = 32;
   const centerY = 32;
   
+  // Energy aura (subtle glow effect) - drawn first so core layers appear on top
+  ctx.fillStyle = "rgba(135, 206, 235, 0.3)";
+  const auraSize = frame === 0 ? 16 : 18;
+  fill(ctx, centerX - auraSize, centerY - auraSize, auraSize * 2, auraSize * 2, "rgba(135, 206, 235, 0.3)");
+  
   // Outer core ring
   const pulseSize = frame === 0 ? 12 : 14;
   ctx.fillStyle = CORE_BLUE;
@@ -41,11 +46,6 @@ function drawEnergyCore(ctx: CanvasRenderingContext2D, frame: number): void {
   ctx.fillStyle = "#FFFFFF";
   const centerSize = frame === 0 ? 4 : 5;
   fill(ctx, centerX - centerSize, centerY - centerSize, centerSize * 2, centerSize * 2, "#FFFFFF");
-  
-  // Energy aura (subtle glow effect)
-  ctx.fillStyle = "rgba(135, 206, 235, 0.3)";
-  const auraSize = frame === 0 ? 16 : 18;
-  fill(ctx, centerX - auraSize, centerY - auraSize, auraSize * 2, auraSize * 2, "rgba(135, 206, 235, 0.3)");
 }
 
 // ============================================================================
