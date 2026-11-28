@@ -39,7 +39,7 @@ function drawChevron(ctx: CanvasRenderingContext2D, dir: Direction, cx: number, 
 }
 
 // Horizontal belt (E/W direction): spans x=0..31, centered vertically
-function drawHBeltHorizontal(ctx: CanvasRenderingContext2D, frame: number): void {
+function drawHBeltHorizontal(ctx: CanvasRenderingContext2D, frame: number, dir: Direction): void {
   const beltYStart = 6, beltHeight = 20;
   // Metal guide rails top and bottom
   fill(ctx, 0, beltYStart - 1, 32, 1, METAL_DARK);
@@ -49,11 +49,12 @@ function drawHBeltHorizontal(ctx: CanvasRenderingContext2D, frame: number): void
     fill(ctx, 0, y, 32, 1, (y === beltYStart || y === beltYStart + beltHeight - 1) ? METAL_DARK : RUBBER_BLACK);
   }
   fill(ctx, 0, beltYStart + 2, 32, beltHeight - 4, RUBBER_DARK);
-  // Chevron arrows scrolling horizontally
+  // Chevron arrows scrolling horizontally with direction-aware pointing
   const scrollX = frame * 4;
+  const chevronDir = dir === "W" ? "W" : "E";
   for (let baseX = 0; baseX < 32; baseX += 8) {
     const xPos = ((baseX + scrollX) % 32) - 4;
-    if (xPos >= -6 && xPos < 32) drawChevron(ctx, "E", xPos + 4, beltYStart + beltHeight / 2, CHEVRON_YELLOW);
+    if (xPos >= -6 && xPos < 32) drawChevron(ctx, chevronDir, xPos + 4, beltYStart + beltHeight / 2, CHEVRON_YELLOW);
   }
   // Side highlights
   fill(ctx, 0, beltYStart + 1, 32, 2, METAL_HIGHLIGHT);
@@ -91,7 +92,7 @@ export function drawBelt(ctx: CanvasRenderingContext2D, dir: Direction, frame: n
   if (dir === "N" || dir === "S") {
     drawBeltVertical(ctx, frame, dir);
   } else {
-    drawHBeltHorizontal(ctx, frame);
+    drawHBeltHorizontal(ctx, frame, dir);
   }
   if (faulted) drawFaultBadge(ctx);
 }
