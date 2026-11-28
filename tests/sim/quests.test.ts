@@ -218,7 +218,7 @@ describe("Dynamic Delivery Quests", () => {
       }
       
       // Check that none of the active quests are for tech-gated materials
-      const techGatedMaterials = ["microchip", "automation_module", "circuit_board"];
+      const techGatedMaterials = ["microchip", "automation_module", "circuit_board", "steel_plate", "silicon_wafer"];
       for (const quest of world.activeQuests || []) {
         const material = Object.keys(quest.progress)[0];
         expect(techGatedMaterials.includes(material || "")).toBe(false);
@@ -242,6 +242,278 @@ describe("Dynamic Delivery Quests", () => {
           expect(material).not.toBe(material1);
         }
       }
+    });
+  });
+
+  describe("Progression scaling", () => {
+    it("should scale target quantity and rewardPoints with unlockedTechs count", () => {
+      const world1 = createTestWorld();
+      const quest1 = generateDynamicQuest(world1)!;
+      const info1 = getQuestProgress(quest1);
+      const material1 = Object.keys(info1)[0]!;
+      const target1 = info1[material1]?.target ?? 0;
+      const dynQuest1 = quest1 as any;
+      const reward1 = dynQuest1.rewardPoints;
+      
+      // Create world with unlocked techs
+      const world2 = createTestWorld();
+      world2.unlockedTechs = ["advanced_smelting", "electronics"];
+      // Generate multiple quests to ensure we get the same base item type
+      // by clearing and regenerating
+      world2.activeQuests = [];
+      const quest2 = generateDynamicQuest(world2)!;
+      const info2 = getQuestProgress(quest2);
+      const material2 = Object.keys(info2)[0]!;
+      const dynQuest2 = quest2 as any;
+      
+      // If same material type, verify scaling
+      if (material1 === material2) {
+        const target2 = info2[material2]?.target ?? 0;
+        const reward2 = dynQuest2.rewardPoints;
+        expect(target2).toBeGreaterThan(target1);
+        expect(reward2).toBeGreaterThan(reward1);
+      }
+    });
+
+    it("should scale iron_plate quest targets and rewards with tutorialPhase", () => {
+      // World at phase 1
+      const world1 = createTestWorld();
+      world1.tutorialPhase = 1;
+      world1.activeQuests = [];
+      let quest1 = generateDynamicQuest(world1)!;
+      
+      // Keep generating until we get an iron_plate quest
+      while (!(quest1 as any).questCatalogId || (quest1 as any).questCatalogId !== "iron_plate") {
+        world1.activeQuests = [];
+        quest1 = generateDynamicQuest(world1)!;
+      }
+      
+      const info1 = getQuestProgress(quest1);
+      const target1 = info1["iron_plate"]?.target ?? 0;
+      const dynQuest1 = quest1 as any;
+      const reward1 = dynQuest1.rewardPoints;
+      
+      // World at phase 3 with more techs
+      const world2 = createTestWorld();
+      world2.tutorialPhase = 3;
+      world2.unlockedTechs = ["advanced_smelting", "electronics"];
+      world2.activeQuests = [];
+      let quest2 = generateDynamicQuest(world2)!;
+      
+      // Keep generating until we get an iron_plate quest
+      while (!(quest2 as any).questCatalogId || (quest2 as any).questCatalogId !== "iron_plate") {
+        world2.activeQuests = [];
+        quest2 = generateDynamicQuest(world2)!;
+      }
+      
+      const info2 = getQuestProgress(quest2);
+      const target2 = info2["iron_plate"]?.target ?? 0;
+      const dynQuest2 = quest2 as any;
+      const reward2 = dynQuest2.rewardPoints;
+      
+      expect(target2).toBeGreaterThan(target1);
+      expect(reward2).toBeGreaterThan(reward1);
+    });
+
+    it("should scale steel_plate quest with advanced_smelting tech", () => {
+      // World without advanced_smelting - steel_plate should not appear
+      const world1 = createTestWorld();
+      world1.activeQuests = [];
+      let steelQuest1: any = null;
+      
+      for (let i = 0; i < 10; i++) {
+        const quest = generateDynamicQuest(world1);
+        if (!quest) break;
+        if ((quest as any).questCatalogId === "steel_plate") {
+          steelQuest1 = quest;
+          break;
+        }
+      }
+      
+      expect(steelQuest1).toBeNull();
+      
+      // World with advanced_smelting - steel_plate should appear and scale
+      const world2 = createTestWorld();
+      world2.unlockedTechs = ["advanced_smelting"];
+      world2.activeQuests = [];
+      let steelQuest2: any = null;
+      
+      for (let i = 0; i < 10; i++) {
+        const quest = generateDynamicQuest(world2);
+        if (!quest) break;
+        if ((quest as any).questCatalogId === "steel_plate") {
+          steelQuest2 = quest;
+          break;
+        }
+      }
+      
+      expect(steelQuest2).not.toBeNull();
+      if (steelQuest2) {
+        expect(steelQuest2.targets).toBeDefined();
+        expect(steelQuest2.targets["steel_plate"]).toBeGreaterThan(0);
+        expect(steelQuest2.rewardPoints).toBeGreaterThan(0);
+      }
+    });
+
+    it("should scale with both unlockedTechs.length and tutorialPhase", () => {
+      const world1 = createTestWorld();
+      world1.tutorialPhase = 1;
+      world1.unlockedTechs = [];
+      world1.activeQuests = [];
+      let quest1 = generateDynamicQuest(world1)!;
+      
+      // Keep generating until we get a copper_wire quest (phase 1)
+      while (!(quest1 as any).questCatalogId || (quest1 as any).questCatalogId !== "copper_wire") {
+        world1.activeQuests = [];
+        quest1 = generateDynamicQuest(world1)!;
+      }
+      
+      const info1 = getQuestProgress(quest1);
+      const target1 = info1["copper_wire"]?.target ?? 0;
+      const dynQuest1 = quest1 as any;
+      const reward1 = dynQuest1.rewardPoints;
+      
+      const world2 = createTestWorld();
+      world2.tutorialPhase = 3;
+      world2.unlockedTechs = ["advanced_smelting", "electronics", "automation"];
+      world2.activeQuests = [];
+      let quest2 = generateDynamicQuest(world2)!;
+      
+      // Keep generating until we get a copper_wire quest
+      while (!(quest2 as any).questCatalogId || (quest2 as any).questCatalogId !== "copper_wire") {
+        world2.activeQuests = [];
+        quest2 = generateDynamicQuest(world2)!;
+      }
+      
+      const info2 = getQuestProgress(quest2);
+      const target2 = info2["copper_wire"]?.target ?? 0;
+      const dynQuest2 = quest2 as any;
+      const reward2 = dynQuest2.rewardPoints;
+      
+      expect(target2).toBeGreaterThan(target1);
+      expect(reward2).toBeGreaterThan(reward1);
+    });
+  });
+
+  describe("Recipe unlock filtering", () => {
+    it("should include all 9 items when advanced_smelting, electronics, automation are unlocked", () => {
+      const world = createTestWorld();
+      world.unlockedTechs = ["advanced_smelting", "electronics", "automation"];
+      world.activeQuests = [];
+      
+      // Generate max active quests
+      for (let i = 0; i < MAX_ACTIVE_QUESTS; i++) {
+        generateDynamicQuest(world);
+      }
+      
+      // Collect all quest catalog IDs
+      const questIds = new Set<string>();
+      for (const quest of world.activeQuests || []) {
+        const dynQuest = quest as any;
+        if (dynQuest.questCatalogId) {
+          questIds.add(dynQuest.questCatalogId);
+        }
+      }
+      
+      // All unlocked recipes should be eligible (though only 3 will be active)
+      expect(questIds.size).toBe(MAX_ACTIVE_QUESTS);
+      
+      // Verify that unlocked recipes can appear
+      const unlockedRecipes = ["iron_plate", "copper_plate", "iron_gear", "copper_wire", 
+                               "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module"];
+      
+      // At least some of the generated quests should be from unlocked recipes
+      for (const questId of questIds) {
+        expect(unlockedRecipes.includes(questId)).toBe(true);
+      }
+    });
+
+    it("should NOT include steel_plate or silicon_wafer without advanced_smelting", () => {
+      const world = createTestWorld();
+      world.unlockedTechs = ["electronics"]; // No advanced_smelting
+      world.activeQuests = [];
+      
+      // Generate max active quests
+      for (let i = 0; i < MAX_ACTIVE_QUESTS; i++) {
+        generateDynamicQuest(world);
+      }
+      
+      // Check that steel_plate and silicon_wafer are not in active quests
+      for (const quest of world.activeQuests || []) {
+        const dynQuest = quest as any;
+        expect(dynQuest.questCatalogId).not.toBe("steel_plate");
+        expect(dynQuest.questCatalogId).not.toBe("silicon_wafer");
+      }
+    });
+
+    it("should NOT include circuit_board, microchip, automation_module without electronics/automation", () => {
+      const world = createTestWorld();
+      world.unlockedTechs = ["advanced_smelting"]; // No electronics or automation
+      world.activeQuests = [];
+      
+      // Generate max active quests
+      for (let i = 0; i < MAX_ACTIVE_QUESTS; i++) {
+        generateDynamicQuest(world);
+      }
+      
+      // Check that electronics/automation gated items are not in active quests
+      for (const quest of world.activeQuests || []) {
+        const dynQuest = quest as any;
+        expect(dynQuest.questCatalogId).not.toBe("circuit_board");
+        expect(dynQuest.questCatalogId).not.toBe("microchip");
+        expect(dynQuest.questCatalogId).not.toBe("automation_module");
+      }
+    });
+
+    it("should include steel_plate and silicon_wafer when advanced_smelting is unlocked", () => {
+      const world = createTestWorld();
+      world.unlockedTechs = ["advanced_smelting"];
+      world.activeQuests = [];
+      
+      // Generate multiple quests to try to get steel_plate or silicon_wafer
+      let foundAdvanced = false;
+      for (let i = 0; i < 20; i++) {
+        world.activeQuests = [];
+        for (let j = 0; j < MAX_ACTIVE_QUESTS; j++) {
+          generateDynamicQuest(world);
+        }
+        
+        for (const quest of world.activeQuests || []) {
+          const dynQuest = quest as any;
+          if (dynQuest.questCatalogId === "steel_plate" || dynQuest.questCatalogId === "silicon_wafer") {
+            foundAdvanced = true;
+            break;
+          }
+        }
+        
+        if (foundAdvanced) break;
+      }
+      
+      expect(foundAdvanced).toBe(true);
+    });
+  });
+
+  describe("Fail-fast behavior", () => {
+    it("should throw error when quest is missing targets field", () => {
+      const world = createTestWorld();
+      const quest = generateDynamicQuest(world)!;
+      
+      // Corrupt the quest by removing targets
+      const dynQuest = quest as any;
+      delete dynQuest.targets;
+      
+      expect(() => isQuestComplete(quest)).toThrow(/missing targets field/);
+    });
+
+    it("should throw error when quest is missing rewardPoints field", () => {
+      const world = createTestWorld();
+      const quest = generateDynamicQuest(world)!;
+      
+      // Corrupt the quest by removing rewardPoints
+      const dynQuest = quest as any;
+      delete dynQuest.rewardPoints;
+      
+      expect(() => completeQuest(world, quest)).toThrow(/missing rewardPoints field/);
     });
   });
 });
