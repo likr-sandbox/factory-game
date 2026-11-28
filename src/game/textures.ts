@@ -13,6 +13,8 @@ import {
   drawSilicaSandDeposit,
   getTerrainTextureKey,
   getDepositTextureKey,
+  TERRAIN_VARIANT_COUNTS,
+  DEPOSIT_STAGES,
 } from "./sprites/terrain";
 import {
   drawBuilding,
@@ -22,6 +24,12 @@ import {
   drawItemSprite,
   getItemTextureKey,
 } from "./sprites/items";
+import {
+  drawWaterEdgeOverlay,
+  drawRockEdgeOverlay,
+  getWaterEdgeTextureKey,
+  getRockEdgeTextureKey,
+} from "./sprites/terrainEdges";
 
 // ============================================================================
 // Texture Registration
@@ -34,6 +42,9 @@ export function registerAllTextures(scene: Scene): void {
   // Register terrain textures (grass, rock, water)
   registerTerrainTextures(textures);
 
+  // Register edge overlay textures (water and rock edges for autotiling)
+  registerEdgeTextures(textures);
+
   // Register ore deposit textures (iron_ore, copper_ore, coal, silica_sand)
   registerDepositTextures(textures);
 
@@ -44,59 +55,82 @@ export function registerAllTextures(scene: Scene): void {
   registerItemTextures(textures);
 }
 
-/** Register terrain base textures */
+/** Register terrain base textures with all variants */
 function registerTerrainTextures(textures: Phaser.Textures.TextureManager): void {
-  // Grass
-  const grassKey = getTerrainTextureKey("grass", 0);
-  const grassCanvas = textures.createCanvas(grassKey, 32, 32);
-  if (!grassCanvas) throw new Error(`Failed to create canvas: ${grassKey}`);
-  const grassCtx = grassCanvas.getContext();
-  drawGrassTile(grassCtx, 0);
-  grassCanvas.refresh();
-
-  // Rock
-  const rockKey = getTerrainTextureKey("rock", 0);
-  const rockCanvas = textures.createCanvas(rockKey, 32, 32);
-  if (!rockCanvas) throw new Error(`Failed to create canvas: ${rockKey}`);
-  const rockCtx = rockCanvas.getContext();
-  drawRockTile(rockCtx, 0);
-  rockCanvas.refresh();
-
-  // Water
-  const waterKey = getTerrainTextureKey("water", 0);
-  const waterCanvas = textures.createCanvas(waterKey, 32, 32);
-  if (!waterCanvas) throw new Error(`Failed to create canvas: ${waterKey}`);
-  const waterCtx = waterCanvas.getContext();
-  drawWaterTile(waterCtx, 0);
-  waterCanvas.refresh();
+  const terrains: TerrainType[] = ["grass", "rock", "water"];
+  
+  for (const terrain of terrains) {
+    const variantCount = TERRAIN_VARIANT_COUNTS[terrain];
+    for (let v = 0; v < variantCount; v++) {
+      const key = getTerrainTextureKey(terrain, v);
+      const canvas = textures.createCanvas(key, 32, 32);
+      if (!canvas) throw new Error(`Failed to create canvas: ${key}`);
+      const ctx = canvas.getContext();
+      
+      if (terrain === "grass") {
+        drawGrassTile(ctx, v);
+      } else if (terrain === "rock") {
+        drawRockTile(ctx, v);
+      } else {
+        drawWaterTile(ctx, v);
+      }
+      
+      canvas.refresh();
+    }
+  }
 }
 
-/** Register ore deposit textures */
+/** Register edge overlay textures for water and rock autotiling */
+function registerEdgeTextures(textures: Phaser.Textures.TextureManager): void {
+  // Register water edge overlays for masks 1-15
+  for (let mask = 1; mask <= 15; mask++) {
+    const key = getWaterEdgeTextureKey(mask);
+    const canvas = textures.createCanvas(key, 32, 32);
+    if (!canvas) throw new Error(`Failed to create canvas: ${key}`);
+    const ctx = canvas.getContext();
+    drawWaterEdgeOverlay(ctx, mask);
+    canvas.refresh();
+  }
+  
+  // Register rock edge overlays for masks 1-15
+  for (let mask = 1; mask <= 15; mask++) {
+    const key = getRockEdgeTextureKey(mask);
+    const canvas = textures.createCanvas(key, 32, 32);
+    if (!canvas) throw new Error(`Failed to create canvas: ${key}`);
+    const ctx = canvas.getContext();
+    drawRockEdgeOverlay(ctx, mask);
+    canvas.refresh();
+  }
+}
+
+/** Register ore deposit textures with all stages */
 function registerDepositTextures(textures: Phaser.Textures.TextureManager): void {
   const deposits: MaterialId[] = ["iron_ore", "copper_ore", "coal", "silica_sand"];
 
   for (const deposit of deposits) {
-    const key = getDepositTextureKey(deposit, 0);
-    const canvas = textures.createCanvas(key, 32, 32);
-    if (!canvas) throw new Error(`Failed to create canvas: ${key}`);
-    const ctx = canvas.getContext();
+    for (const stage of DEPOSIT_STAGES) {
+      const key = getDepositTextureKey(deposit, 0, stage);
+      const canvas = textures.createCanvas(key, 32, 32);
+      if (!canvas) throw new Error(`Failed to create canvas: ${key}`);
+      const ctx = canvas.getContext();
 
-    switch (deposit) {
-      case "iron_ore":
-        drawIronOreDeposit(ctx, 0);
-        break;
-      case "copper_ore":
-        drawCopperOreDeposit(ctx, 0);
-        break;
-      case "coal":
-        drawCoalDeposit(ctx, 0);
-        break;
-      case "silica_sand":
-        drawSilicaSandDeposit(ctx, 0);
-        break;
+      switch (deposit) {
+        case "iron_ore":
+          drawIronOreDeposit(ctx, 0, stage);
+          break;
+        case "copper_ore":
+          drawCopperOreDeposit(ctx, 0, stage);
+          break;
+        case "coal":
+          drawCoalDeposit(ctx, 0, stage);
+          break;
+        case "silica_sand":
+          drawSilicaSandDeposit(ctx, 0, stage);
+          break;
+      }
+
+      canvas.refresh();
     }
-
-    canvas.refresh();
   }
 }
 
@@ -172,13 +206,47 @@ function registerItemTextures(textures: Phaser.Textures.TextureManager): void {
 /** Get all expected terrain texture keys */
 export function getExpectedTerrainKeys(): string[] {
   const terrains: TerrainType[] = ["grass", "rock", "water"];
-  return terrains.map((t) => getTerrainTextureKey(t, 0));
+  const keys: string[] = [];
+  
+  for (const terrain of terrains) {
+    const variantCount = TERRAIN_VARIANT_COUNTS[terrain];
+    for (let v = 0; v < variantCount; v++) {
+      keys.push(getTerrainTextureKey(terrain, v));
+    }
+  }
+  
+  return keys;
 }
 
 /** Get all expected deposit texture keys */
 export function getExpectedDepositKeys(): string[] {
   const deposits: MaterialId[] = ["iron_ore", "copper_ore", "coal", "silica_sand"];
-  return deposits.map((d) => getDepositTextureKey(d, 0));
+  const keys: string[] = [];
+  
+  for (const deposit of deposits) {
+    for (const stage of DEPOSIT_STAGES) {
+      keys.push(getDepositTextureKey(deposit, 0, stage));
+    }
+  }
+  
+  return keys;
+}
+
+/** Get all expected edge texture keys */
+export function getExpectedEdgeKeys(): string[] {
+  const keys: string[] = [];
+  
+  // Water edge keys for masks 1-15
+  for (let mask = 1; mask <= 15; mask++) {
+    keys.push(getWaterEdgeTextureKey(mask));
+  }
+  
+  // Rock edge keys for masks 1-15
+  for (let mask = 1; mask <= 15; mask++) {
+    keys.push(getRockEdgeTextureKey(mask));
+  }
+  
+  return keys;
 }
 
 /** Get all expected building texture keys */
@@ -239,6 +307,7 @@ export function getExpectedItemKeys(): string[] {
 export function getAllExpectedTextureKeys(): string[] {
   return [
     ...getExpectedTerrainKeys(),
+    ...getExpectedEdgeKeys(),
     ...getExpectedDepositKeys(),
     ...getExpectedBuildingKeys(),
     ...getExpectedItemKeys(),
