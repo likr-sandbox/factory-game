@@ -1,19 +1,13 @@
 // Progression: Tech Tree, research points, Tutorial Phases 1-4
-import type { WorldState, MaterialId, BuildingType, RecipeId } from "./types";
+import type { WorldState, MaterialId, BuildingType, RecipeId, TechId } from "./types";
 import { TECH_CATALOG, RECIPE_CATALOG, BUILDING_CATALOG } from "./catalog";
 
-export type TechId = "underground_belt" | "filter_splitter" | "high_efficiency"
-  | "sensor" | "recycler" | "advanced_smelting" | "electronics" | "automation";
+export type { TechId };
 
-const TECH_COSTS: Record<TechId, number> = {
-  underground_belt: 150, filter_splitter: 100, high_efficiency: 200,
-  sensor: 150, recycler: 200, advanced_smelting: 200, electronics: 300, automation: 500,
-};
-
-const RESEARCH_POINTS: Partial<Record<MaterialId, number>> = {
-  iron_plate: 5, copper_plate: 5, iron_gear: 8, copper_wire: 8,
-  steel_plate: 12, silicon_wafer: 12, circuit_board: 15, microchip: 20,
-  automation_module: 25, slag: 2,
+export const RESEARCH_POINTS: Partial<Record<MaterialId, number>> = {
+  iron_plate: 2, copper_plate: 2, iron_gear: 6, copper_wire: 2,
+  steel_plate: 10, silicon_wafer: 10, circuit_board: 24, microchip: 75,
+  automation_module: 240, slag: 0,
 };
 
 export function awardResearchPoints(world: WorldState, material: MaterialId, amount: number): number {
@@ -26,6 +20,20 @@ export function calculateTotalResearchPoints(history: Array<{ material: Material
   return history.reduce((s, d) => s + ((RESEARCH_POINTS[d.material] ?? 0) * d.amount), 0);
 }
 
+export function getMissingPrerequisites(world: WorldState, techId: TechId): TechId[] {
+  const tech = TECH_CATALOG[techId];
+  if (!tech) throw new Error(`Unknown tech ID: ${techId}`);
+  const prereqs = tech.prerequisites || [];
+  const unlocked = new Set(world.unlockedTechs || []);
+  const missing: TechId[] = [];
+  for (const prereq of prereqs) {
+    if (!unlocked.has(prereq)) {
+      missing.push(prereq);
+    }
+  }
+  return missing;
+}
+
 function getTechUnlocks(techId: TechId): string[] {
   const cat = TECH_CATALOG[techId];
   if (!cat) throw new Error(`Unknown tech ID: ${techId}`);
@@ -33,10 +41,18 @@ function getTechUnlocks(techId: TechId): string[] {
 }
 
 export function unlockTech(world: WorldState, techId: TechId): boolean {
-  const cost = TECH_COSTS[techId] ?? TECH_CATALOG[techId]?.cost;
-  if (!cost && !TECH_CATALOG[techId]) throw new Error(`Unknown tech ID: ${techId}`);
+  const tech = TECH_CATALOG[techId];
+  if (!tech) throw new Error(`Unknown tech ID: ${techId}`);
+  
+  // Check prerequisites
+  const missingPrereqs = getMissingPrerequisites(world, techId);
+  if (missingPrereqs.length > 0) return false;
+  
+  // Check research points
+  const cost = tech.cost;
   const pts = world.researchPoints ?? 0;
   if (pts < cost) return false;
+  
   world.researchPoints = pts - cost;
   if (!world.unlockedTechs.includes(techId)) world.unlockedTechs.push(techId);
   return true;
