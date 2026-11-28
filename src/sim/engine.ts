@@ -278,7 +278,8 @@ function canAcceptItem(building: BuildingState, material: MaterialId): boolean {
       return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
     case "smelter":
     case "assembler":
-      // Check if material is a valid input for current recipe
+      // Check if input buffer has space AND material is a valid input for current recipe
+      if (countBufferItems(building.inputBuffer) >= MAX_OUTPUT_BUFFER) return false;
       if (!building.recipeId) return false;
       const recipe = RECIPE_CATALOG[building.recipeId];
       if (!recipe) return false;
