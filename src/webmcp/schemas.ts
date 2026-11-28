@@ -100,7 +100,7 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
     inputSchema: {
       type: "object",
       properties: {
-        windowTicks: { type: "number", description: "Number of ticks to aggregate metrics over (positive integer, default: 600)" },
+        windowTicks: { type: "number", description: "Number of ticks to aggregate metrics over (positive integer, default: 3600)" },
       },
       required: [],
       additionalProperties: false,
