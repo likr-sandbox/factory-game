@@ -2,7 +2,7 @@
 // Pure CanvasRenderingContext2D pixel drawing using palette colors only
 
 import type { TerrainType, MaterialId } from "../../sim/types";
-import { getTerrainColor, getDepositColor } from "../palette";
+import { getTerrainColor, getDepositColor, SHADING_PALETTE } from "../palette";
 
 // ============================================================================
 // Texture Key Helpers (deterministic)
@@ -132,7 +132,7 @@ export function drawWaterTile(ctx: CanvasRenderingContext2D, seed: number = 0): 
 // Ore Deposit Drawing Functions
 // ============================================================================
 
-/** Draw a single mineral chunk with outline */
+/** Draw a single mineral chunk with outline using SHADING_PALETTE */
 function drawMineralChunk(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -141,8 +141,8 @@ function drawMineralChunk(
   baseRgb: [number, number, number],
   outlineRgb: [number, number, number]
 ): void {
-  // Draw outline first (dark border)
-  ctx.fillStyle = `rgb(${outlineRgb[0]},${outlineRgb[1]},${outlineRgb[2]})`;
+  // Draw outline first using SHADING_PALETTE.outline for consistency
+  ctx.fillStyle = SHADING_PALETTE.outline.css;
   for (let oy = -1; oy <= size; oy++) {
     for (let ox = -1; ox <= size; ox++) {
       if (ox === -1 || ox === size || oy === -1 || oy === size) {
@@ -156,11 +156,10 @@ function drawMineralChunk(
   ctx.fillRect(x + 1, y + 1, Math.max(1, size - 1), Math.max(1, size - 1));
 }
 
-/** Draw iron ore deposit with cool steel-blue large angular chunks and dark slate outline */
+/** Draw iron ore deposit with cool steel-blue large angular chunks */
 export function drawIronOreDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
   const depositColor = getDepositColor("iron_ore");
   const rgb = rgbFromCss(depositColor.css);
-  const outlineRgb: [number, number, number] = [45, 55, 65];  // Dark slate outline
   
   // Iron ore: fewer but larger angular chunks (3-4px)
   const clusterCount = 12;
@@ -170,24 +169,20 @@ export function drawIronOreDeposit(ctx: CanvasRenderingContext2D, seed: number =
     const cy = Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 24) + 4;
     const size = 2 + Math.floor(seededRandom(seed + i * 7 + 200, 0, 0) * 3);  // 2-4px
     
-    drawMineralChunk(ctx, cx, cy, size, rgb, outlineRgb);
+    drawMineralChunk(ctx, cx, cy, size, rgb, [0, 0, 0]);
     
-    // Add subtle highlight
+    // Add subtle highlight using SHADING_PALETTE.highlight
     if (seededRandom(seed + i * 7 + 300, 0, 0) > 0.6) {
-      const lightR = Math.min(255, rgb[0] + 30);
-      const lightG = Math.min(255, rgb[1] + 30);
-      const lightB = Math.min(255, rgb[2] + 30);
-      ctx.fillStyle = `rgb(${lightR},${lightG},${lightB})`;
+      ctx.fillStyle = SHADING_PALETTE.highlight.css;
       ctx.fillRect(cx + 1, cy + 1, 1, 1);
     }
   }
 }
 
-/** Draw copper ore deposit with warm bright copper-orange irregular chunks and brown outline */
+/** Draw copper ore deposit with warm bright copper-orange irregular chunks */
 export function drawCopperOreDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
   const depositColor = getDepositColor("copper_ore");
   const rgb = rgbFromCss(depositColor.css);
-  const outlineRgb: [number, number, number] = [100, 50, 15];  // Dark brown outline
   
   // Copper ore: medium-sized irregular chunks (2-3px), slightly more numerous
   const clusterCount = 16;
@@ -197,24 +192,27 @@ export function drawCopperOreDeposit(ctx: CanvasRenderingContext2D, seed: number
     const cy = Math.floor(seededRandom(seed + i * 5 + 100, 0, 0) * 26) + 3;
     const size = 1 + Math.floor(seededRandom(seed + i * 5 + 200, 0, 0) * 3);  // 1-3px
     
-    drawMineralChunk(ctx, cx, cy, size, rgb, outlineRgb);
+    drawMineralChunk(ctx, cx, cy, size, rgb, [0, 0, 0]);
     
-    // Add warmer highlight
+    // Add highlight using SHADING_PALETTE.highlight
     if (seededRandom(seed + i * 5 + 300, 0, 0) > 0.5) {
-      const lightR = Math.min(255, rgb[0] + 40);
-      const lightG = Math.min(255, Math.max(0, rgb[1] + 20));
-      const lightB = Math.max(0, rgb[2] - 10);
-      ctx.fillStyle = `rgb(${lightR},${lightG},${lightB})`;
+      ctx.fillStyle = SHADING_PALETTE.highlight.css;
       ctx.fillRect(cx + 1, cy, 1, 1);
     }
   }
 }
 
-/** Draw coal deposit with deep charcoal/black rounded chunks and near-black outline */
+/** Draw coal deposit with deep charcoal/black rounded chunks */
 export function drawCoalDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
   const depositColor = getDepositColor("coal");
   const rgb = rgbFromCss(depositColor.css);
-  const outlineRgb: [number, number, number] = [10, 12, 14];  // Near-black outline
+  
+  // Ensure all channels stay < 100 for coal (dark constraint)
+  const darkRgb: [number, number, number] = [
+    Math.min(rgb[0], 99),
+    Math.min(rgb[1], 99),
+    Math.min(rgb[2], 99)
+  ];
   
   // Coal: small rounded chunks (1-2px), dense clustering
   const clusterCount = 20;
@@ -224,24 +222,27 @@ export function drawCoalDeposit(ctx: CanvasRenderingContext2D, seed: number = 0)
     const cy = Math.floor(seededRandom(seed + i * 4 + 100, 0, 0) * 28) + 2;
     const size = 1 + Math.floor(seededRandom(seed + i * 4 + 200, 0, 0) * 2);  // 1-2px
     
-    drawMineralChunk(ctx, cx, cy, size, rgb, outlineRgb);
+    drawMineralChunk(ctx, cx, cy, size, darkRgb, [0, 0, 0]);
     
-    // Coal has minimal highlights (mostly dark)
+    // Coal has minimal highlights (mostly dark) - use SHADING_PALETTE.shadow
     if (seededRandom(seed + i * 4 + 300, 0, 0) > 0.7) {
-      const lightR = Math.min(255, rgb[0] + 20);
-      const lightG = Math.min(255, rgb[1] + 20);
-      const lightB = Math.min(255, rgb[2] + 20);
-      ctx.fillStyle = `rgb(${lightR},${lightG},${lightB})`;
+      ctx.fillStyle = SHADING_PALETTE.shadow.css;
       ctx.fillRect(cx + 1, cy + 1, 1, 1);
     }
   }
 }
 
-/** Draw silica sand deposit with pale warm sand beige granular chunks and tan outline */
+/** Draw silica sand deposit with pale warm sand beige granular chunks */
 export function drawSilicaSandDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
   const depositColor = getDepositColor("silica_sand");
   const rgb = rgbFromCss(depositColor.css);
-  const outlineRgb: [number, number, number] = [180, 160, 100];  // Tan outline
+  
+  // Ensure all channels stay > 150 for silica sand (light constraint)
+  const lightRgb: [number, number, number] = [
+    Math.max(rgb[0], 151),
+    Math.max(rgb[1], 151),
+    Math.max(rgb[2], 151)
+  ];
   
   // Silica sand: small granular chunks (1-2px), scattered pattern
   const clusterCount = 18;
@@ -251,20 +252,17 @@ export function drawSilicaSandDeposit(ctx: CanvasRenderingContext2D, seed: numbe
     const cy = Math.floor(seededRandom(seed + i * 6 + 100, 0, 0) * 28) + 2;
     const size = 1 + Math.floor(seededRandom(seed + i * 6 + 200, 0, 0) * 2);  // 1-2px
     
-    drawMineralChunk(ctx, cx, cy, size, rgb, outlineRgb);
+    drawMineralChunk(ctx, cx, cy, size, lightRgb, [0, 0, 0]);
     
-    // Add soft highlight
+    // Add soft highlight using SHADING_PALETTE.highlight
     if (seededRandom(seed + i * 6 + 300, 0, 0) > 0.5) {
-      const lightR = Math.min(255, rgb[0] + 25);
-      const lightG = Math.min(255, rgb[1] + 25);
-      const lightB = Math.min(255, rgb[2] + 30);
-      ctx.fillStyle = `rgb(${lightR},${lightG},${lightB})`;
+      ctx.fillStyle = SHADING_PALETTE.highlight.css;
       ctx.fillRect(cx, cy + 1, 1, 1);
     }
   }
 }
 
-/** Generic ore deposit drawing (kept for backward compatibility, delegates to iron) */
+/** Generic ore deposit drawing (kept for backward compatibility, delegates to type-specific) */
 export function drawOreDeposit(
   ctx: CanvasRenderingContext2D,
   material: MaterialId,
@@ -285,10 +283,9 @@ export function drawOreDeposit(
       drawSilicaSandDeposit(ctx, seed);
       break;
     default:
-      // For processed materials, use generic approach
+      // For processed materials, use generic approach with SHADING_PALETTE
       const depositColor = getDepositColor(material);
       const rgb = rgbFromCss(depositColor.css);
-      const outlineRgb: [number, number, number] = [Math.max(0, rgb[0] - 60), Math.max(0, rgb[1] - 60), Math.max(0, rgb[2] - 60)];
       
       const clusterCount = 15;
       for (let i = 0; i < clusterCount; i++) {
@@ -296,7 +293,7 @@ export function drawOreDeposit(
         const cy = Math.floor(seededRandom(seed + i + 100, 0, 0) * 26) + 3;
         const size = 1 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 3);
         
-        drawMineralChunk(ctx, cx, cy, size, rgb, outlineRgb);
+        drawMineralChunk(ctx, cx, cy, size, rgb, [0, 0, 0]);
       }
   }
 }
