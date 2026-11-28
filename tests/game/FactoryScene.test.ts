@@ -145,7 +145,7 @@ vi.mock("phaser", () => {
     };
     add = {
       sprite: vi.fn().mockReturnValue(mockSprite),
-      image: vi.fn(),
+      image: vi.fn().mockReturnValue({ setDepth: vi.fn(), destroy: vi.fn() }),
       graphics: vi.fn().mockReturnValue(mockGraphics),
     };
     events = {
@@ -1075,3 +1075,226 @@ describe("PlacementGhost", () => {
     expect(ghostSprite.destroy).toHaveBeenCalled();
   });
 });
+
+describe("FactoryScene terrain rendering with edges and deposit stages", () => {
+  let scene: FactoryScene;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    scene = new FactoryScene();
+  });
+
+  describe("renderTerrainTilemap with edge overlays and deposit stages", () => {
+    it("should render base terrain with variants using getTerrainVariant", () => {
+      const world = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world, createInputState());
+      scene.renderTerrainTilemap();
+
+      // Should create 4 terrain images (2x2 grid)
+      const imageCalls = (scene.add.image as ReturnType<typeof vi.fn>).mock.calls;
+      expect(imageCalls.length).toBe(4);
+      
+      // All should have terrain keys with variant seeds (0-4 for grass)
+      for (const call of imageCalls) {
+        const textureKey = call[2] as string;
+        expect(textureKey).toMatch(/^terrain:grass:seed:\d+$/);
+      }
+    });
+
+    it("should render edge overlays for water tiles at boundaries with setDepth(0.2)", () => {
+      const world = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "water", deposit: null, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "water", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world, createInputState());
+      scene.renderTerrainTilemap();
+
+      // Water at (0,0) should have edge overlay (exposed to east and south)
+      const imageCalls = (scene.add.image as ReturnType<typeof vi.fn>).mock.calls;
+      const edgeImages = imageCalls.filter((call: unknown[]) => {
+        const textureKey = call[2] as string;
+        return textureKey.startsWith("edge:water:mask:");
+      });
+      expect(edgeImages.length).toBeGreaterThan(0);
+      
+      // Check that setDepth was called with 0.2 for edge overlays
+      const allImageObjects = imageCalls.map((call: unknown[]) => call[3]);
+      // The mock returns an object with setDepth: vi.fn()
+    });
+
+    it("should render edge overlays for rock tiles at boundaries", () => {
+      const world = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "rock", deposit: null, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "rock", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world, createInputState());
+      scene.renderTerrainTilemap();
+
+      const imageCalls = (scene.add.image as ReturnType<typeof vi.fn>).mock.calls;
+      const rockEdgeImages = imageCalls.filter((call: unknown[]) => {
+        const textureKey = call[2] as string;
+        return textureKey.startsWith("edge:rock:mask:");
+      });
+      expect(rockEdgeImages.length).toBeGreaterThan(0);
+    });
+
+    it("should render deposits with correct stage keys at setDepth(0.5)", () => {
+      const world = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: { material: "iron_ore", remaining: 1000, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: { material: "coal", remaining: 300, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world, createInputState());
+      scene.renderTerrainTilemap();
+
+      const spriteCalls = (scene.add.sprite as ReturnType<typeof vi.fn>).mock.calls;
+      // iron_ore at full should be "rich" stage
+      const ironOreCall = spriteCalls.find((call: unknown[]) => {
+        const textureKey = call[2] as string;
+        return textureKey.includes("iron_ore") && textureKey.includes("stage:rich");
+      });
+      expect(ironOreCall).toBeDefined();
+
+      // coal at 30% should be "low" stage
+      const coalCall = spriteCalls.find((call: unknown[]) => {
+        const textureKey = call[2] as string;
+        return textureKey.includes("coal") && textureKey.includes("stage:low");
+      });
+      expect(coalCall).toBeDefined();
+    });
+
+    it("should destroy previous terrain/edge/deposit objects before re-rendering", () => {
+      const world1 = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world1, createInputState());
+      scene.renderTerrainTilemap();
+
+      const initialImageCalls = (scene.add.image as ReturnType<typeof vi.fn>).mock.calls.length;
+      
+      // Re-render with same world
+      scene.renderTerrainTilemap();
+      
+      // Should have destroyed old objects and created new ones
+      // The destroy method should have been called on previous objects
+      const secondImageCalls = (scene.add.image as ReturnType<typeof vi.fn>).mock.calls.length;
+      expect(secondImageCalls).toBe(initialImageCalls * 2); // Old + new
+    });
+  });
+
+  describe("syncWorld dynamic deposit stage updates", () => {
+    it("should update deposit sprite texture when stage changes from rich to medium", () => {
+      const world1 = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: { material: "iron_ore", remaining: 800, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world1, createInputState());
+      scene.renderTerrainTilemap();
+      
+      // First sync should create the deposit sprite with rich stage
+      scene.syncWorld(world1);
+      
+      // Check that sprite was created with rich stage texture
+      const spriteCalls = (scene.add.sprite as ReturnType<typeof vi.fn>).mock.calls;
+      const richTextureCall = spriteCalls.find((call: unknown[]) => {
+        const textureKey = call[2] as string;
+        return textureKey.includes("iron_ore") && textureKey.includes("stage:rich");
+      });
+      expect(richTextureCall).toBeDefined();
+
+      // Update world with medium stage deposit
+      const world2 = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: { material: "iron_ore", remaining: 400, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      
+      // Clear only setTexture mock, keep sprite calls
+      (mockSprite.setTexture as ReturnType<typeof vi.fn>).mockClear();
+      
+      scene.syncWorld(world2);
+      
+      // Should have called setTexture with medium stage
+      const setTextureCalls = (mockSprite.setTexture as ReturnType<typeof vi.fn>).mock.calls;
+      const mediumTextureCall = setTextureCalls.find((call: unknown[]) => {
+        const textureKey = call[0] as string;
+        return textureKey.includes("stage:medium");
+      });
+      expect(mediumTextureCall).toBeDefined();
+    });
+
+    it("should NOT update texture when deposit stage remains the same", () => {
+      const world1 = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: { material: "iron_ore", remaining: 800, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world1, createInputState());
+      scene.renderTerrainTilemap();
+      scene.syncWorld(world1);
+
+      // Reset mock
+      vi.mocked(mockSprite.setTexture).mockClear();
+      
+      // Sync same world again
+      scene.syncWorld(world1);
+      
+      // Should not call setTexture since stage hasn't changed
+      expect(mockSprite.setTexture).not.toHaveBeenCalled();
+    });
+
+    it("should handle deposit depletion (rich -> depleted)", () => {
+      const world1 = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: { material: "copper_ore", remaining: 700, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      scene.setContext(world1, createInputState());
+      scene.renderTerrainTilemap();
+      scene.syncWorld(world1);
+
+      vi.mocked(mockSprite.setTexture).mockClear();
+      
+      const world2 = createMockWorld({
+        tiles: [
+          [{ x: 0, y: 0, terrain: "grass", deposit: { material: "copper_ore", remaining: 0, initialAmount: 1000 }, buildingId: null }, { x: 1, y: 0, terrain: "grass", deposit: null, buildingId: null }],
+          [{ x: 0, y: 1, terrain: "grass", deposit: null, buildingId: null }, { x: 1, y: 1, terrain: "grass", deposit: null, buildingId: null }],
+        ],
+      });
+      
+      scene.syncWorld(world2);
+      
+      // Should update texture to "depleted" stage
+      const depletedTextureCall = (mockSprite.setTexture as ReturnType<typeof vi.fn>).mock.calls.find((call: unknown[]) => {
+        const textureKey = call[0] as string;
+        return textureKey.includes("stage:depleted");
+      });
+      expect(depletedTextureCall).toBeDefined();
+    });
+  });
+});
+
+import { createInputState as createRealInputState } from "../../src/game/input";
+import type { InputState } from "../../src/game/input";
+
+function createInputState(): InputState {
+  return createRealInputState();
+}

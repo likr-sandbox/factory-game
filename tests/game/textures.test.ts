@@ -1,9 +1,11 @@
 // Tests for procedural texture registration
 import { describe, it, expect, vi } from "vitest";
 import type { Scene, Textures } from "phaser";
+import type { MaterialId } from "../../src/sim/types";
 import {
   registerAllTextures,
   getExpectedTerrainKeys,
+  getExpectedEdgeKeys,
   getExpectedDepositKeys,
   getExpectedBuildingKeys,
   getExpectedItemKeys,
@@ -141,6 +143,7 @@ describe("Texture Registration", () => {
     const canvases = getCreatedCanvases(scene);
     const expectedKeys = [
       ...getExpectedTerrainKeys(),
+      ...getExpectedEdgeKeys(),
       ...getExpectedDepositKeys(),
       ...getExpectedBuildingKeys(),
       ...getExpectedItemKeys(),
@@ -172,40 +175,83 @@ describe("Texture Registration", () => {
   });
 
   describe("Terrain textures", () => {
-    it("should register grass, rock, and water", () => {
+    it("should register all terrain variants", () => {
       const scene = createMockScene();
       registerAllTextures(scene);
 
       const canvases = getCreatedCanvases(scene);
       const terrainKeys = getExpectedTerrainKeys();
 
-      expect(terrainKeys).toHaveLength(3);
-      expect(terrainKeys).toContain("terrain:grass:seed:0");
-      expect(terrainKeys).toContain("terrain:rock:seed:0");
-      expect(terrainKeys).toContain("terrain:water:seed:0");
+      // 5 grass + 4 rock + 3 water = 12
+      expect(terrainKeys).toHaveLength(12);
+      
+      // Check all grass variants (0-4)
+      for (let v = 0; v < 5; v++) {
+        expect(terrainKeys).toContain(`terrain:grass:seed:${v}`);
+        expect(canvases.has(`terrain:grass:seed:${v}`)).toBe(true);
+      }
+      
+      // Check all rock variants (0-3)
+      for (let v = 0; v < 4; v++) {
+        expect(terrainKeys).toContain(`terrain:rock:seed:${v}`);
+        expect(canvases.has(`terrain:rock:seed:${v}`)).toBe(true);
+      }
+      
+      // Check all water variants (0-2)
+      for (let v = 0; v < 3; v++) {
+        expect(terrainKeys).toContain(`terrain:water:seed:${v}`);
+        expect(canvases.has(`terrain:water:seed:${v}`)).toBe(true);
+      }
+    });
+  });
 
-      for (const key of terrainKeys) {
+  describe("Edge textures", () => {
+    it("should register all edge overlay masks for water and rock", () => {
+      const scene = createMockScene();
+      registerAllTextures(scene);
+
+      const canvases = getCreatedCanvases(scene);
+      const edgeKeys = getExpectedEdgeKeys();
+
+      // 15 water edges + 15 rock edges = 30
+      expect(edgeKeys).toHaveLength(30);
+
+      // Check all water edge masks (1-15)
+      for (let mask = 1; mask <= 15; mask++) {
+        const key = `edge:water:mask:${mask}`;
+        expect(edgeKeys).toContain(key);
+        expect(canvases.has(key)).toBe(true);
+      }
+
+      // Check all rock edge masks (1-15)
+      for (let mask = 1; mask <= 15; mask++) {
+        const key = `edge:rock:mask:${mask}`;
+        expect(edgeKeys).toContain(key);
         expect(canvases.has(key)).toBe(true);
       }
     });
   });
 
   describe("Deposit textures", () => {
-    it("should register iron_ore, copper_ore, coal, and silica_sand", () => {
+    it("should register all 4 stages for each deposit type", () => {
       const scene = createMockScene();
       registerAllTextures(scene);
 
       const canvases = getCreatedCanvases(scene);
       const depositKeys = getExpectedDepositKeys();
 
-      expect(depositKeys).toHaveLength(4);
-      expect(depositKeys).toContain("deposit:iron_ore:seed:0");
-      expect(depositKeys).toContain("deposit:copper_ore:seed:0");
-      expect(depositKeys).toContain("deposit:coal:seed:0");
-      expect(depositKeys).toContain("deposit:silica_sand:seed:0");
+      // 4 deposits × 4 stages = 16
+      expect(depositKeys).toHaveLength(16);
 
-      for (const key of depositKeys) {
-        expect(canvases.has(key)).toBe(true);
+      const deposits: MaterialId[] = ["iron_ore", "copper_ore", "coal", "silica_sand"];
+      const stages = ["rich", "medium", "low", "depleted"];
+
+      for (const deposit of deposits) {
+        for (const stage of stages) {
+          const key = `deposit:${deposit}:seed:0:stage:${stage}`;
+          expect(depositKeys).toContain(key);
+          expect(canvases.has(key)).toBe(true);
+        }
       }
     });
   });
@@ -271,13 +317,14 @@ describe("Texture Registration", () => {
   describe("Texture count helpers", () => {
     it("should calculate correct total count", () => {
       const count = getExpectedTextureCount();
-      // 3 terrain + 4 deposits + 160 buildings (hub is 64×64, others 32×32) + 14 items = 181
-      expect(count).toBe(181);
+      // 12 terrain (5+4+3) + 30 edge (15+15) + 16 deposit (4×4) + 160 building + 14 item = 232
+      expect(count).toBe(232);
     });
 
     it("should return correct counts per category", () => {
-      expect(getExpectedTerrainKeys()).toHaveLength(3);
-      expect(getExpectedDepositKeys()).toHaveLength(4);
+      expect(getExpectedTerrainKeys()).toHaveLength(12);
+      expect(getExpectedEdgeKeys()).toHaveLength(30);
+      expect(getExpectedDepositKeys()).toHaveLength(16);
       expect(getExpectedBuildingKeys()).toHaveLength(160);
       expect(getExpectedItemKeys()).toHaveLength(14);
     });
