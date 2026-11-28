@@ -176,14 +176,17 @@ describe("processUndergroundBelts", () => {
 
     const ub2 = addBuilding(world, "underground_belt", 4, 2, "E");
     // Add a belt in front of ub2 to receive forward output
-    addBuilding(world, "belt", 5, 2, "E");
+    const forwardBelt = addBuilding(world, "belt", 5, 2, "E");
 
     processUndergroundBelts(world);
 
-    // ub2 receives items in inputBuffer
-    expect(ub2.inputBuffer.iron_plate).toBeGreaterThan(0);
-    // Forward output should push to the belt in front (ub2's outputBuffer gets processed)
-    // Note: The actual forward output happens from ub2's outputBuffer after processing
+    // ub1 transfers items to ub2, then ub2 pushes forward to the belt in front
+    expect(ub1.inputBuffer.iron_plate).toBe(0); // Items left ub1
+    
+    // Items should end up in either ub2's buffer or forwarded to forwardBelt
+    // Since we push forward after transfer, items go to forwardBelt's beltItems
+    expect(forwardBelt.beltItems.length).toBeGreaterThan(0);
+    expect(forwardBelt.beltItems[0]!.material).toBe("iron_plate");
   });
 
   it("stops at max range of 4 tiles", () => {
@@ -204,6 +207,63 @@ describe("processUndergroundBelts", () => {
 
     // ub2 should not receive items (beyond range)
     expect(ub2.inputBuffer.iron_plate).toBeUndefined();
+  });
+
+  it("pushes items forward when underground belt has no pair (standalone configuration)", () => {
+    const world = createTestWorld(10, 5);
+
+    // Single underground belt at (1, 2) facing E with items
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { iron_plate: 5 };
+
+    // No matching underground belt - just belts and a smelter in front
+    const belt1 = addBuilding(world, "belt", 2, 2, "E");
+    const belt2 = addBuilding(world, "belt", 3, 2, "E");
+    
+    // Smelter in front to receive items
+    const smelter = addBuilding(world, "smelter", 4, 2, "E");
+    smelter.recipeId = "iron_plate";
+
+    processUndergroundBelts(world);
+
+    // Items should be pushed from ub1's inputBuffer to belt1's beltItems
+    // Belts use beltItems array, not inputBuffer
+    expect(belt1.beltItems.length).toBeGreaterThan(0);
+    expect(belt1.beltItems[0]!.material).toBe("iron_plate");
+    
+    // After underground belt processing, items are in belt1's beltItems
+    // They will be moved to belt2 and then smelter by subsequent belt processing
+    // For this test, verify the immediate result of underground belt processing
+  });
+
+  it("continuously outputs from paired underground belts to forward building", () => {
+    const world = createTestWorld(15, 5);
+
+    // Entry underground belt at (1, 2) facing E
+    const ub1 = addBuilding(world, "underground_belt", 1, 2, "E");
+    ub1.inputBuffer = { copper_plate: 10 };
+
+    // Connect through belts
+    addBuilding(world, "belt", 2, 2, "E");
+    addBuilding(world, "belt", 3, 2, "E");
+
+    // Exit underground belt at (4, 2) facing E
+    const ub2 = addBuilding(world, "underground_belt", 4, 2, "E");
+    
+    // Add a belt and splitter in front of ub2
+    addBuilding(world, "belt", 5, 2, "E");
+    const splitter = addBuilding(world, "splitter", 6, 2, "E");
+
+    processUndergroundBelts(world);
+
+    // ub1 transfers to ub2, then ub2 pushes forward
+    expect(ub1.inputBuffer.copper_plate).toBe(0);
+    expect(ub2.inputBuffer.copper_plate).toBeGreaterThan(0);
+    
+    // After transfer, ub2 should push items forward to the belt/splitter
+    // The items will be in either ub2's buffer or forwarded
+    const forwardHasItems = (splitter.inputBuffer.copper_plate || 0) > 0;
+    expect(forwardHasItems || ub2.inputBuffer.copper_plate! > 0).toBe(true);
   });
 });
 

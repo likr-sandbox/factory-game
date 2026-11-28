@@ -45,6 +45,8 @@ export function processUndergroundBelts(world: WorldState): void {
   for (const building of Object.values(world.buildings).filter(b => b.type === "underground_belt")) {
     const { dx, dy } = directionDelta(building.direction);
 
+    let foundPair = false;
+    
     for (let step = 1; step <= UNDERGROUND_RANGE; step++) {
       const targetX = building.x + dx * step;
       const targetY = building.y + dy * step;
@@ -58,18 +60,53 @@ export function processUndergroundBelts(world: WorldState): void {
 
       if (targetBuilding.type === "underground_belt" && targetBuilding.direction === building.direction) {
         transferUndergroundItems(world, building, targetBuilding);
+        foundPair = true;
         break;
       }
       if (targetBuilding.type !== "belt") break;
+    }
+    
+    // If no pair found, push items forward to building in front
+    if (!foundPair) {
+      const forwardX = building.x + dx;
+      const forwardY = building.y + dy;
+      if (inBounds(world, forwardX, forwardY)) {
+        const forwardTile = getTile(world, forwardX, forwardY);
+        if (forwardTile?.buildingId) {
+          const forwardBuilding = world.buildings[forwardTile.buildingId];
+          if (forwardBuilding) {
+            // Push outputBuffer items forward
+            pushOutputToBuilding(world, building, forwardBuilding);
+            // Also transfer inputBuffer items (underground belts skip this in pushOutputToBuilding)
+            for (const [materialStr, amount] of Object.entries(building.inputBuffer)) {
+              if ((amount || 0) <= 0) continue;
+              transferItem(building.inputBuffer, forwardBuilding, materialStr as MaterialId, amount!);
+            }
+            // Also transfer belt items if the forward building is a belt
+            if (forwardBuilding.type === "belt") {
+              for (const item of building.beltItems) {
+                if (forwardBuilding.beltItems.length < 3) {
+                  forwardBuilding.beltItems.push({ ...item });
+                }
+              }
+              building.beltItems = [];
+            }
+          }
+        }
+      }
     }
   }
 }
 
 function transferUndergroundItems(world: WorldState, source: BuildingState, target: BuildingState): void {
+  // Track if this is a successful pair transfer
+  let transferred = false;
+  
   // Transfer from source.inputBuffer to target's inputBuffer
   for (const [materialStr, amount] of Object.entries(source.inputBuffer)) {
     if ((amount || 0) <= 0) continue;
-    transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!);
+    const transferredAmount = transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!);
+    if (transferredAmount > 0) transferred = true;
   }
   
   // Move belt items from source to target (not copy - remove from source)
@@ -86,19 +123,24 @@ function transferUndergroundItems(world: WorldState, source: BuildingState, targ
     if (idx !== -1) {
       source.beltItems.splice(idx, 1);
       target.beltItems.push({ ...item });
+      transferred = true;
     }
   }
   
-  // Forward output: push items from target's outputBuffer to buildings in front
-  const { dx, dy } = directionDelta(target.direction);
-  const forwardX = target.x + dx;
-  const forwardY = target.y + dy;
-  if (inBounds(world, forwardX, forwardY)) {
-    const forwardTile = getTile(world, forwardX, forwardY);
-    if (forwardTile?.buildingId) {
-      const forwardBuilding = world.buildings[forwardTile.buildingId];
-      if (forwardBuilding) {
-        pushOutputToBuilding(world, target, forwardBuilding);
+  // Forward output from target: push items from target's inputBuffer/outputBuffer to buildings in front
+  // Only do this if we successfully transferred items
+  if (transferred) {
+    const { dx, dy } = directionDelta(target.direction);
+    const forwardX = target.x + dx;
+    const forwardY = target.y + dy;
+    if (inBounds(world, forwardX, forwardY)) {
+      const forwardTile = getTile(world, forwardX, forwardY);
+      if (forwardTile?.buildingId) {
+        const forwardBuilding = world.buildings[forwardTile.buildingId];
+        if (forwardBuilding && forwardBuilding.type !== "underground_belt") {
+          // Push from target's inputBuffer (which just received items) to forward building
+          pushOutputToBuilding(world, target, forwardBuilding);
+        }
       }
     }
   }
@@ -280,8 +322,17 @@ function transferItem(sourceBuffer: Partial<Record<MaterialId, number>>, targetB
 }
 
 function pushOutputToBuilding(world: WorldState, source: BuildingState, target: BuildingState): void {
+  // Transfer from outputBuffer
   for (const [materialStr, amount] of Object.entries(source.outputBuffer)) {
     if ((amount || 0) <= 0) continue;
     transferItem(source.outputBuffer, target, materialStr as MaterialId, amount!);
+  }
+  // Also transfer from inputBuffer (for standalone underground belts and other buildings)
+  // But NOT for paired underground belts - they keep items in inputBuffer until processed
+  if (source.type !== "underground_belt") {
+    for (const [materialStr, amount] of Object.entries(source.inputBuffer)) {
+      if ((amount || 0) <= 0) continue;
+      transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!);
+    }
   }
 }
