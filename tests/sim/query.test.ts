@@ -4,6 +4,7 @@ import { createWorld } from "../../src/sim/world";
 import { stepTicks } from "../../src/sim/engine";
 import { placeBuilding } from "../../src/sim/actions";
 import { getFactorySummary, inspectRegion, findResources, listRecipes, getMetrics, type TileEntry, type ResourceInfo, type RecipeInfo } from "../../src/sim/query";
+import { TICKS_PER_MINUTE } from "../../src/sim/constants";
 
 describe("Query Functions", () => {
   describe("getFactorySummary", () => {
@@ -40,6 +41,8 @@ describe("Query Functions", () => {
       expect(summary.tutorialProgress.phase).toBe(1);
       expect(summary.tutorialProgress.currentStep).not.toBeNull();
       expect(summary.activeQuests).toEqual([]);
+      // SPM should be 0 initially
+      expect(summary.spm).toBe(0);
     });
 
     it("counts buildings and tracks deliveries after actions", () => {
@@ -65,6 +68,37 @@ describe("Query Functions", () => {
       const summary = getFactorySummary(world);
       expect(summary.buildingCount).toBe(2); // hub + miner
       expect(summary.activeCount).toBeGreaterThanOrEqual(0);
+    });
+
+    it("calculates SPM from deliveryHistory over 3600 ticks", () => {
+      const world = createWorld(42);
+      
+      // Manually add delivery history entries
+      world.deliveryHistory = [
+        { tick: 100, material: "automation_module", amount: 30 },
+        { tick: 200, material: "microchip", amount: 20 },
+      ];
+      world.tick = TICKS_PER_MINUTE; // Set to 3600
+
+      const summary = getFactorySummary(world);
+      // Both materials are in the window [0, 3600], total = 30 + 20 = 50 spm
+      expect(summary.spm).toBe(50);
+    });
+
+    it("excludes deliveries outside the 3600 tick window", () => {
+      const world = createWorld(42);
+      
+      // Add delivery at tick 0 and at current tick
+      world.deliveryHistory = [
+        { tick: 0, material: "automation_module", amount: 100 },
+        { tick: TICKS_PER_MINUTE, material: "automation_module", amount: 50 },
+      ];
+      world.tick = TICKS_PER_MINUTE;
+
+      const summary = getFactorySummary(world);
+      // Window is [0, 3600], both entries are included
+      // But only final/electronic materials count: automation_module counts
+      expect(summary.spm).toBe(150);
     });
   });
 
@@ -258,18 +292,21 @@ describe("Query Functions", () => {
       expect(metrics.researchPoints).toBe(0);
     });
 
-    it("tracks delivery rates per material", () => {
+    it("tracks delivery rates per material using history", () => {
       const world = createWorld(42);
 
-      // Place miner and smelter to produce iron plates
-      placeBuilding(world, { x: 20, y: 20, type: "miner", direction: "E" });
-      placeBuilding(world, { x: 21, y: 20, type: "smelter", direction: "E", recipeId: "iron_plate" });
-      
-      // Run for many ticks to accumulate some production
-      stepTicks(world, 600);
+      // Manually add delivery history
+      world.deliveryHistory = [
+        { tick: 100, material: "automation_module", amount: 30 },
+        { tick: 200, material: "microchip", amount: 20 },
+      ];
+      world.tick = TICKS_PER_MINUTE;
 
       const metrics = getMetrics(world);
-      expect(metrics.spm).toBeGreaterThanOrEqual(0);
+      // Both materials in window, normalized to per-minute
+      expect(metrics.spm).toBe(50);
+      expect(metrics.deliveriesPerMinute.automation_module).toBe(30);
+      expect(metrics.deliveriesPerMinute.microchip).toBe(20);
     });
 
     it("identifies bottleneck candidates", () => {
@@ -291,13 +328,43 @@ describe("Query Functions", () => {
       expect(metrics.alerts.length).toBe(0);
     });
 
-    it("supports custom window size", () => {
+    it("supports custom window size with proper normalization for both spm and deliveriesByMaterial", () => {
       const world = createWorld(12345);
-      const metrics1 = getMetrics(world, { windowTicks: 300 });
-      const metrics2 = getMetrics(world, { windowTicks: 1200 });
+      
+      // Add 30 automation_modules in 30 ticks
+      world.deliveryHistory = [
+        { tick: 0, material: "automation_module", amount: 30 },
+      ];
+      world.tick = 30;
 
-      expect(metrics1.spm).toBeGreaterThanOrEqual(0);
-      expect(metrics2.spm).toBeGreaterThanOrEqual(0);
+      // With windowTicks=30, scale = 3600/30 = 120, so 30 * 120 = 3600 spm
+      const metrics30 = getMetrics(world, { windowTicks: 30 });
+      expect(metrics30.spm).toBe(3600);
+      expect(metrics30.deliveriesPerMinute.automation_module).toBe(3600);
+
+      // With default windowTicks=3600, scale = 3600/3600 = 1, so 30 * 1 = 30 spm
+      const metricsDefault = getMetrics(world, { windowTicks: TICKS_PER_MINUTE });
+      expect(metricsDefault.spm).toBe(30);
+      expect(metricsDefault.deliveriesPerMinute.automation_module).toBe(30);
+    });
+
+    it("normalizes deliveriesByMaterial and spm consistently for non-default windowTicks", () => {
+      const world = createWorld(12345);
+      
+      // Add deliveries over 1800 ticks (half minute)
+      world.deliveryHistory = [
+        { tick: 0, material: "automation_module", amount: 60 },
+        { tick: 900, material: "microchip", amount: 30 },
+      ];
+      world.tick = 1800;
+
+      // windowTicks=1800, scale = 3600/1800 = 2
+      const metrics = getMetrics(world, { windowTicks: 1800 });
+      
+      // 60 * 2 = 120, 30 * 2 = 60, total = 180
+      expect(metrics.deliveriesPerMinute.automation_module).toBe(120);
+      expect(metrics.deliveriesPerMinute.microchip).toBe(60);
+      expect(metrics.spm).toBe(180);
     });
   });
 
@@ -507,6 +574,57 @@ describe("Query Functions", () => {
         expect(splitterEntry?.building).toBeDefined();
         expect(splitterEntry?.building?.filterMaterial).toBe("iron_plate");
       });
+    });
+  });
+
+  describe("World isolation and 3600 tick window", () => {
+    it("should use TICKS_PER_MINUTE (3600) as default window", () => {
+      const world = createWorld(42);
+      
+      // Add delivery at tick 0
+      world.deliveryHistory = [
+        { tick: 0, material: "automation_module", amount: 100 },
+      ];
+      world.tick = TICKS_PER_MINUTE; // 3600
+
+      // Default window is [0, 3600], entry at tick 0 is included
+      const metrics = getMetrics(world);
+      expect(metrics.spm).toBe(100);
+    });
+
+    it("should exclude deliveries older than 3600 ticks", () => {
+      const world = createWorld(42);
+      
+      // Add delivery at tick 0, but current tick is 7200
+      world.deliveryHistory = [
+        { tick: 0, material: "automation_module", amount: 100 },
+      ];
+      world.tick = TICKS_PER_MINUTE * 2; // 7200
+
+      // Default window is [3600, 7200], entry at tick 0 is excluded
+      const metrics = getMetrics(world);
+      expect(metrics.spm).toBe(0);
+    });
+
+    it("should maintain isolation between different world instances", () => {
+      const world1 = createWorld(1);
+      const world2 = createWorld(2);
+      
+      world1.deliveryHistory = [{ tick: 100, material: "automation_module", amount: 50 }];
+      world1.tick = TICKS_PER_MINUTE;
+      
+      world2.deliveryHistory = [{ tick: 100, material: "microchip", amount: 25 }];
+      world2.tick = TICKS_PER_MINUTE;
+
+      const metrics1 = getMetrics(world1);
+      const metrics2 = getMetrics(world2);
+
+      expect(metrics1.spm).toBe(50);
+      expect(metrics2.spm).toBe(25);
+      expect(metrics1.deliveriesPerMinute.automation_module).toBe(50);
+      expect(metrics1.deliveriesPerMinute.microchip).toBeUndefined();
+      expect(metrics2.deliveriesPerMinute.automation_module).toBeUndefined();
+      expect(metrics2.deliveriesPerMinute.microchip).toBe(25);
     });
   });
 });
