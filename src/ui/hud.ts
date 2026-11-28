@@ -1,10 +1,11 @@
 // HUD UI for Japanese top status bar
 // Pure TypeScript - DOM elements via container.ownerDocument only
 
-import type { WorldState } from "../sim/types";
+import type { WorldState, MaterialId } from "../sim/types";
 import { getFactorySummary } from "../sim/query";
 import { getTutorialProgress, getTechTreeStatus } from "../sim/progression";
 import { getActiveQuests, getQuestProgress } from "../sim/quests";
+import { MATERIAL_CATALOG } from "../sim/catalog";
 
 const QUEST_DURATION_TICKS = 6000;
 
@@ -119,7 +120,7 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   tutorialEl.className = "hud-item tutorial-display";
   tutorialEl.textContent = "チュートリアル：--";
 
-  // Tech tree unlock buttons container
+  // Tech tree container (will be populated with 8 tech buttons in mountHud)
   const techTreeEl = doc.createElement("span");
   techTreeEl.className = "hud-item tech-tree";
   techTreeEl.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;align-items:center";
@@ -175,6 +176,30 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
 
   container.appendChild(hudEl);
 
+  // Initialize tech buttons for all 8 TECH_CATALOG entries (one-time generation)
+  const techButtonMap: Record<string, { btn: HTMLButtonElement; cost: number }> = {};
+  const TECH_BUTTONS: Array<{ techId: string; label: string; cost: number }> = [
+    { techId: "filter_splitter", label: "フィルター分配機", cost: 100 },
+    { techId: "underground_belt", label: "交差ブリッジ", cost: 150 },
+    { techId: "high_efficiency", label: "高効率製錬", cost: 200 },
+    { techId: "sensor", label: "センサー", cost: 150 },
+    { techId: "recycler", label: "不純物処理炉", cost: 200 },
+    { techId: "advanced_smelting", label: "高度精錬技術", cost: 200 },
+    { techId: "electronics", label: "電子工業", cost: 300 },
+    { techId: "automation", label: "自動化研究", cost: 500 },
+  ];
+  for (const t of TECH_BUTTONS) {
+    const btn = doc.createElement("button");
+    btn.className = "tech-btn";
+    btn.textContent = `${t.label} (アンロック)`;
+    btn.title = `${t.label} - RP コスト：${t.cost}`;
+    btn.addEventListener("click", () => {
+      options.onUnlockTech?.(t.techId);
+    });
+    techButtonMap[t.techId] = { btn, cost: t.cost };
+    techTreeEl.appendChild(btn);
+  }
+
   let currentSpeed: SpeedValue = 1;
 
   function setActiveSpeedButton(parent: HTMLElement, speed: SpeedValue): void {
@@ -201,17 +226,31 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
       // Update building counts
       countEl.textContent = `稼働/故障：${summary.activeCount} / ${summary.faultedCount}`;
 
-      // Update delivered counters - show key materials
+      // Update delivered counters - show key materials including mid-game items with delivered > 0
       const keyMaterials: Array<{ id: string; label: string }> = [
         { id: "iron_plate", label: "鉄板" },
         { id: "copper_plate", label: "銅板" },
-        { id: "iron_gear", label: "鉄ギア" },
+        { id: "iron_gear", label: "鉄歯車" },
         { id: "copper_wire", label: "銅線" },
       ];
       const deliveredParts: string[] = [];
       for (const m of keyMaterials) {
         const amount = summary.delivered[m.id as keyof typeof summary.delivered] ?? 0;
         deliveredParts.push(`${m.label}:${amount}`);
+      }
+      // Add mid-game materials with delivered > 0
+      const midGameMaterials: Array<{ id: string; label: string }> = [
+        { id: "steel_plate", label: "鋼板" },
+        { id: "silicon_wafer", label: "シリコンウェハ" },
+        { id: "circuit_board", label: "電子基板" },
+        { id: "microchip", label: "マイクロチップ" },
+        { id: "automation_module", label: "自動化モジュール" },
+      ];
+      for (const m of midGameMaterials) {
+        const amount = summary.delivered[m.id as keyof typeof summary.delivered] ?? 0;
+        if (amount > 0) {
+          deliveredParts.push(`${m.label}:${amount}`);
+        }
       }
       deliveredEl.textContent = `納入数：${deliveredParts.join(", ")}`;
 
@@ -233,29 +272,50 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
         }
       }
 
-      // Update tech tree unlock buttons
-      techTreeEl.textContent = "";
+      // Update tech tree buttons non-destructively
       const techStatus = getTechTreeStatus(world);
-      const techButtons: Array<{ techId: string; label: string; unlocked: boolean }> = [
-        { techId: "underground_belt", label: "地下ベルト", unlocked: techStatus.undergroundBelt },
-        { techId: "filter_splitter", label: "フィルター分配機", unlocked: techStatus.filterSplitter },
-        { techId: "sensor", label: "センサー", unlocked: techStatus.sensor },
-        { techId: "recycler", label: "不純物処理炉", unlocked: techStatus.recycler },
-        { techId: "assembler", label: "組立機", unlocked: techStatus.electronics.assembler },
-      ];
-      for (const t of techButtons) {
-        if (!t.unlocked) {
-          const btn = doc.createElement("button");
-          btn.className = "tech-btn";
-          btn.textContent = `${t.label}(アンロック)`;
-          btn.addEventListener("click", () => {
-            options.onUnlockTech?.(t.techId);
-          });
-          techTreeEl.appendChild(btn);
-        }
+      const allUnlocked = (techStatus.undergroundBelt && techStatus.filterSplitter && 
+        techStatus.highEfficiencyRecipes.ironPlateHigh && techStatus.highEfficiencyRecipes.copperPlateHigh &&
+        techStatus.sensor && techStatus.recycler &&
+        techStatus.advancedSmelting.steelPlate && techStatus.advancedSmelting.siliconWafer &&
+        techStatus.electronics.assembler && techStatus.electronics.circuitBoard && techStatus.electronics.microchip &&
+        techStatus.automation.automationModule);
+      
+      if (allUnlocked) {
+        // All techs unlocked - hide the tech tree container
+        techTreeEl.style.display = "none";
+      } else {
+        techTreeEl.style.display = "";
+        // Non-destructive update: disable buttons and update labels/costs
+        const unlockedTechs = new Set(world.unlockedTechs || []);
+        
+        // Update each tech button
+        const updateTechBtn = (techId: string, unlocked: boolean, subKey?: string) => {
+          const entry = techButtonMap[techId];
+          if (!entry) return;
+          const { btn, cost } = entry;
+          if (unlocked) {
+            btn.disabled = true;
+            btn.style.display = "none";
+          } else {
+            btn.disabled = false;
+            btn.style.display = "";
+            btn.textContent = `${TECH_BUTTONS.find(t => t.techId === techId)?.label} (アンロック)`;
+            btn.title = `${TECH_BUTTONS.find(t => t.techId === techId)?.label} - RP コスト：${cost}`;
+          }
+        };
+        
+        updateTechBtn("filter_splitter", techStatus.filterSplitter);
+        updateTechBtn("underground_belt", techStatus.undergroundBelt);
+        updateTechBtn("sensor", techStatus.sensor);
+        updateTechBtn("recycler", techStatus.recycler);
+        updateTechBtn("advanced_smelting", techStatus.advancedSmelting.steelPlate || techStatus.advancedSmelting.siliconWafer);
+        updateTechBtn("electronics", techStatus.electronics.assembler || techStatus.electronics.circuitBoard || techStatus.electronics.microchip);
+        updateTechBtn("automation", techStatus.automation.automationModule);
+        updateTechBtn("high_efficiency", techStatus.highEfficiencyRecipes.ironPlateHigh || techStatus.highEfficiencyRecipes.copperPlateHigh);
       }
 
-      // Update active quests
+      // Update active quests with material names from MATERIAL_CATALOG
       const activeQuests = getActiveQuests(world);
       if (activeQuests.length === 0) {
         questsEl.textContent = "クエスト：なし";
@@ -265,7 +325,10 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
           const progress = getQuestProgress(quest);
           const parts: string[] = [];
           for (const [material, prog] of Object.entries(progress)) {
-            parts.push(`${prog.current}/${prog.target}`);
+            // Get material name from MATERIAL_Catalog
+            const matEntry = MATERIAL_CATALOG[material as MaterialId];
+            const matName = matEntry ? matEntry.nameJa : material;
+            parts.push(`${matName} ${prog.current}/${prog.target}`);
           }
           const remainingTicks = QUEST_DURATION_TICKS - (world.tick - quest.startedAtTick);
           questLabels.push(`[${parts.join(", ")} 残り${Math.floor(remainingTicks / 600)}分]`);
