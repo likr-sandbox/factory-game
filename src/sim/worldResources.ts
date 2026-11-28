@@ -46,7 +46,8 @@ function bfsFindPath(
   world: WorldState,
   startPositions: Pos[],
   targetPositions: Pos[],
-  maxSteps: number = 100
+  maxSteps: number = 100,
+  allowRockWater: boolean = false
 ): Pos[] | null {
   const visited = new Set<string>();
   const queue: { pos: Pos; path: Pos[] }[] = [];
@@ -59,14 +60,18 @@ function bfsFindPath(
   
   const isWalkable = (x: number, y: number): boolean => {
     if (x < 0 || x >= world.width || y < 0 || y >= world.height) return false;
-    if (isInHubSafeZone(x, y)) return false; // Don't carve through hub zone
+    // Only exclude the actual 2x2 hub tiles, not the safe zone
+    if (isInHubSafeZone(x, y) && Math.abs(x - 31.5) <= 0.5 && Math.abs(y - 31.5) <= 0.5) return false;
     const tile = world.tiles[y]![x]!;
-    // Can walk on grass or through deposits (we can carve rock/water)
+    if (allowRockWater) {
+      // For carving BFS, we can walk through any terrain except deposits
+      return tile.deposit === null;
+    }
+    // Normal BFS: only walk on grass and deposits (don't carve yet)
     return tile.terrain !== "rock" && tile.terrain !== "water";
   };
   
-  const steps: Pos[] = [];
-  while (queue.length > 0 && steps.length < maxSteps) {
+  while (queue.length > 0 && queue.length < maxSteps) {
     const { pos, path } = queue.shift()!;
     
     if (targetSet.has(`${pos.x},${pos.y}`)) {
@@ -91,40 +96,6 @@ function bfsFindPath(
   }
   
   return null;
-}
-
-function findBlockingTilesOnPath(world: WorldState, path: Pos[]): Pos[] {
-  const blocking: Pos[] = [];
-  for (let i = 0; i < path.length - 1; i++) {
-    const curr = path[i]!;
-    const next = path[i + 1]!;
-    
-    // Check tiles between curr and next for obstacles
-    const dx = next.x - curr.x;
-    const dy = next.y - curr.y;
-    
-    if (dx !== 0) {
-      // Horizontal step
-      const stepX = dx > 0 ? 1 : -1;
-      for (let x = curr.x + stepX; x !== next.x; x += stepX) {
-        const tile = world.tiles[curr.y]![x]!;
-        if ((tile.terrain === "rock" || tile.terrain === "water") && !tile.deposit) {
-          blocking.push({ x, y: curr.y });
-        }
-      }
-    } else if (dy !== 0) {
-      // Vertical step
-      const stepY = dy > 0 ? 1 : -1;
-      for (let y = curr.y + stepY; y !== next.y; y += stepY) {
-        const tile = world.tiles[y]![curr.x]!;
-        if ((tile.terrain === "rock" || tile.terrain === "water") && !tile.deposit) {
-          blocking.push({ x: curr.x, y });
-        }
-      }
-    }
-  }
-  
-  return blocking;
 }
 
 function carveGrassPath(world: WorldState, path: Pos[]): void {
@@ -233,14 +204,14 @@ function ensureStarterReachability(world: WorldState, rng: () => number): void {
     // Check if any starter cluster is reachable
     let allReachable = true;
     for (const clusterPos of starterClusters) {
-      const path = bfsFindPath(world, hubPerimeter, [clusterPos], 200);
+      const path = bfsFindPath(world, hubPerimeter, [clusterPos], 200, false);
       if (!path) {
         allReachable = false;
         
-        // Try to carve a path
-        const alternativePath = bfsFindPath(world, hubPerimeter, [clusterPos], 300);
-        if (alternativePath) {
-          carveGrassPath(world, alternativePath);
+        // Try to carve a path using BFS that allows rock/water
+        const carvingPath = bfsFindPath(world, hubPerimeter, [clusterPos], 300, true);
+        if (carvingPath) {
+          carveGrassPath(world, carvingPath);
         }
         break;
       }
@@ -295,7 +266,7 @@ export function generateTieredResources(world: WorldState, rng: () => number): v
   const outerMax = 29;
   
   // Helper to find empty position in a ring
-  function findEmptyPosition(minDist: number, maxDist: number, excludeMaterial?: "iron_ore" | "copper_ore" | "coal" | "silica_sand"): Pos | null {
+  function findEmptyPosition(minDist: number, maxDist: number): Pos | null {
     const attempts = 200;
     for (let i = 0; i < attempts; i++) {
       const angle = rng() * Math.PI * 2;
@@ -308,7 +279,7 @@ export function generateTieredResources(world: WorldState, rng: () => number): v
       
       const tile = world.tiles[y]![x]!;
       if (tile.terrain !== "grass") continue;
-      if (excludeMaterial && tile.deposit?.material === excludeMaterial) continue;
+      if (tile.deposit !== null) continue;
       
       return { x, y };
     }
@@ -347,7 +318,7 @@ export function generateTieredResources(world: WorldState, rng: () => number): v
   
   // Place outer clusters (6-10 tiles, 1500-3500 amount) for all 4 types
   for (const material of ["iron_ore", "copper_ore", "coal", "silica_sand"] as const) {
-    const pos = findEmptyPosition(outerMin, outerMax, material);
+    const pos = findEmptyPosition(outerMin, outerMax);
     if (!pos) continue;
     
     const amount = 1500 + Math.floor(rng() * 2001); // 1500-3500
