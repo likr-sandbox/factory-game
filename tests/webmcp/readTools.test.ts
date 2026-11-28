@@ -123,10 +123,25 @@ describe("createReadToolHandlers", () => {
     });
 
     it("throws when parameters are non-numeric", () => {
-      expect(() => handlers.inspect_region({ x: "0", y: 0, width: 10, height: 10 } as unknown as Record<string, unknown>)).toThrow(/finite numbers/);
-      expect(() => handlers.inspect_region({ x: 0, y: null, width: 10, height: 10 } as unknown as Record<string, unknown>)).toThrow(/finite numbers/);
-      expect(() => handlers.inspect_region({ x: 0, y: 0, width: NaN, height: 10 } as Record<string, unknown>)).toThrow(/finite numbers/);
-      expect(() => handlers.inspect_region({ x: 0, y: 0, width: 10, height: Infinity } as Record<string, unknown>)).toThrow(/finite numbers/);
+      expect(() => handlers.inspect_region({ x: "0", y: 0, width: 10, height: 10 } as unknown as Record<string, unknown>)).toThrow(/integers/);
+      expect(() => handlers.inspect_region({ x: 0, y: null, width: 10, height: 10 } as unknown as Record<string, unknown>)).toThrow(/integers/);
+      expect(() => handlers.inspect_region({ x: 0, y: 0, width: NaN, height: 10 } as Record<string, unknown>)).toThrow(/integers/);
+      expect(() => handlers.inspect_region({ x: 0, y: 0, width: 10, height: Infinity } as Record<string, unknown>)).toThrow(/integers/);
+    });
+
+    it("throws when parameters are non-integer", () => {
+      expect(() => handlers.inspect_region({ x: 0.5, y: 0, width: 10, height: 10 } as unknown as Record<string, unknown>)).toThrow(/integers/);
+      expect(() => handlers.inspect_region({ x: 0, y: 0.7, width: 10, height: 10 } as unknown as Record<string, unknown>)).toThrow(/integers/);
+    });
+
+    it("throws when width or height exceeds 24", () => {
+      expect(() => handlers.inspect_region({ x: 0, y: 0, width: 25, height: 10 } as Record<string, unknown>)).toThrow(/<= 24/);
+      expect(() => handlers.inspect_region({ x: 0, y: 0, width: 10, height: 30 } as Record<string, unknown>)).toThrow(/<= 24/);
+    });
+
+    it("throws when width or height is <= 0", () => {
+      expect(() => handlers.inspect_region({ x: 0, y: 0, width: 0, height: 10 } as Record<string, unknown>)).toThrow(/> 0/);
+      expect(() => handlers.inspect_region({ x: 0, y: 0, width: 10, height: -5 } as Record<string, unknown>)).toThrow(/> 0/);
     });
   });
 
@@ -160,6 +175,15 @@ describe("createReadToolHandlers", () => {
       const result = handlers.find_resources({ limit: 5 });
       const resources = result as Array<unknown>;
       expect(resources.length).toBeLessThanOrEqual(5);
+    });
+
+    it("throws when limit is non-integer", () => {
+      expect(() => handlers.find_resources({ limit: 3.5 } as unknown as Record<string, unknown>)).toThrow(/positive integer/);
+    });
+
+    it("throws when limit is <= 0", () => {
+      expect(() => handlers.find_resources({ limit: 0 } as Record<string, unknown>)).toThrow(/positive integer/);
+      expect(() => handlers.find_resources({ limit: -5 } as Record<string, unknown>)).toThrow(/positive integer/);
     });
   });
 
@@ -278,6 +302,15 @@ describe("createReadToolHandlers", () => {
       const result = handlers.get_metrics({ windowTicks: 300 });
       const metrics = result as Record<string, unknown>;
       expect(typeof metrics.spm).toBe("number");
+    });
+
+    it("throws when windowTicks is non-integer", () => {
+      expect(() => handlers.get_metrics({ windowTicks: 300.5 } as unknown as Record<string, unknown>)).toThrow(/positive integer/);
+    });
+
+    it("throws when windowTicks is <= 0", () => {
+      expect(() => handlers.get_metrics({ windowTicks: 0 } as Record<string, unknown>)).toThrow(/positive integer/);
+      expect(() => handlers.get_metrics({ windowTicks: -100 } as Record<string, unknown>)).toThrow(/positive integer/);
     });
   });
 });
