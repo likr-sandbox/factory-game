@@ -103,25 +103,27 @@ function drawBuilding(
   ctx.fillStyle = buildingColor.hex;
   
   // Draw building as filled square with slight border
-  const margin = 1;
+  // Use margin=0 since size=2 and margin=1 would result in size - margin*2 = 0
+  const margin = 0;
   ctx.fillRect(pxX + margin, pxY + margin, size - margin * 2, size - margin * 2);
 
-  // Draw direction indicator (small triangle on output side)
+  // Draw direction indicator (small dot on output side)
   ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
   const centerX = pxX + size / 2;
   const centerY = pxY + size / 2;
-  const arrowSize = 3;
+  // Reduce arrowSize to 0.5 to fit within 2x2px tile (original 3px exceeds tile size)
+  const arrowOffset = 0.5;
   
   let ax = centerX, ay = centerY;
   switch (building.direction) {
-    case "N": ay -= arrowSize; break;
-    case "S": ay += arrowSize; break;
-    case "E": ax += arrowSize; break;
-    case "W": ax -= arrowSize; break;
+    case "N": ay -= arrowOffset; break;
+    case "S": ay += arrowOffset; break;
+    case "E": ax += arrowOffset; break;
+    case "W": ax -= arrowOffset; break;
   }
   
   ctx.beginPath();
-  ctx.arc(ax, ay, 2, 0, Math.PI * 2);
+  ctx.arc(ax, ay, 0.5, 0, Math.PI * 2);
   ctx.fill();
 
   // Fault indicator
@@ -329,7 +331,7 @@ export function mountMinimap(
   container: { ownerDocument: Document; appendChild: (child: Node) => void },
   options: MinimapOptions = {}
 ): {
-  update: (world: WorldState) => void;
+  update: (world: WorldState, cameraViewport?: CameraViewport) => void;
   destroy: () => void;
   setVisible: (visible: boolean) => void;
 } {
