@@ -75,9 +75,16 @@ describe("mountHud", () => {
   it("should display SPM in slim format", () => {
     const handle = mountHud(container as unknown as HTMLElement);
     handle.update(makeWorld());
-    const spmEl = container.children[0]!.children[0]!;
-    expect(spmEl.textContent).toContain("SPM:");
+    const hud = container.children[0]!;
+    // Slim HUD format from PR #27
+    expect(hud.children[0]!.textContent).toContain("SPM:");
+    // Speed controls (buttons: 一時停止，1x, 2x, 4x)
+    expect(hud.children[2]!.textContent).toContain("稼働/故障");
+    expect(hud.children[3]!.textContent).toContain("RP:");
+    expect(hud.children[4]!.textContent).toContain("チュートリアル");
+    expect(hud.children[5]!.textContent).toContain("クエスト");
     handle.destroy();
+    expect(container.children).toHaveLength(0);
   });
 
   it("should display building counts concisely", () => {
@@ -121,10 +128,10 @@ describe("mountHud", () => {
   it("should update SPM display when world changes", () => {
     const handle = mountHud(container as unknown as HTMLElement);
     const spmEl = container.children[0]!.children[0]!;
-    const w1 = makeWorld(); w1.deliveryHistory = [{ tick: 50, material: "iron_plate", amount: 10 }];
+    const w1 = makeWorld(); w1.deliveryHistory = [{ tick: 50, material: "circuit_board", amount: 10 }];
     handle.update(w1);
     const first = spmEl.textContent;
-    const w2 = makeWorld(); w2.tick = 999; w2.deliveryHistory = [{ tick: 950, material: "copper_plate", amount: 20 }];
+    const w2 = makeWorld(); w2.tick = 999; w2.deliveryHistory = [{ tick: 950, material: "microchip", amount: 20 }];
     handle.update(w2);
     expect(spmEl.textContent).not.toBe(first);
     expect(spmEl.textContent).toBe("SPM:20");
@@ -385,6 +392,7 @@ describe("mountHud", () => {
     world.tick = 1000;
     world.unlockedTechs = [];
     // Note: Quest templates use targets like iron_plate: 15, copper_plate: 15
+    // QUEST_DURATION_TICKS = 36,000 (10 minutes × 3,600 ticks/minute)
     world.activeQuests = [
       {
         questId: "quest_0",
@@ -398,12 +406,75 @@ describe("mountHud", () => {
     ];
     handle.update(world);
     
+    
+    // Tech drawer test from main
     const techDrawer = container.children[1]!;  // tech-drawer popover
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     if (buttons.length > 0) {
       buttons[0]!.dispatchEvent("click");
       expect(onUnlockTech).toHaveBeenCalled();
     }
+    
+    handle.destroy();
+  });
+
+  it("should display quest remaining time decreasing accurately as ticks advance", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 0 },
+        startedAtTick: 0,
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 100 },
+        rewardPoints: 50,
+      } as ActiveQuestState,
+    ];
+    
+    world.tick = 100;
+    handle.update(world);
+    const questsEl = container.children[0]!.children[5]!;
+    expect(questsEl.textContent).toContain("残り10分");
+    
+    world.tick = 18000;
+    handle.update(world);
+    expect(questsEl.textContent).toContain("残り5分");
+    
+    world.tick = 35000;
+    handle.update(world);
+    expect(questsEl.textContent).toContain("残り1分");
+    
+    world.tick = 36000;
+    handle.update(world);
+    expect(questsEl.textContent).toContain("残り0分");
+    
+    handle.destroy();
+  });
+
+  it("should display active quests with progress", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.tick = 1000;
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 5, copper_plate: 3 },
+        startedAtTick: 500,
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 15, copper_plate: 15 },
+        rewardPoints: 50,
+      } as ActiveQuestState,
+    ];
+    handle.update(world);
+    
+    const questsEl = container.children[0]!.children[5]!;
+    expect(questsEl.textContent).toContain("鉄板 5/15");
+    expect(questsEl.textContent).toContain("残り10分");
+    
     handle.destroy();
   });
 

@@ -5,6 +5,8 @@ import type { WorldState, ActiveQuestState, MaterialId, RecipeId } from "./types
 import { nextRandom } from "./world";
 import { QUEST_CATALOG, RECIPE_CATALOG, type QuestEntry } from "./catalog";
 import { isRecipeUnlocked } from "./progression";
+import { QUEST_DURATION_TICKS } from "./constants";
+export { QUEST_DURATION_TICKS };
 
 export const MAX_ACTIVE_QUESTS = 3;
 
@@ -214,7 +216,7 @@ export function processQuests(world: WorldState): void {
   const remaining: ActiveQuestState[] = [];
 
   for (const quest of activeQuests) {
-    const expired = world.tick - quest.startedAtTick >= 6000;
+    const expired = world.tick - quest.startedAtTick >= QUEST_DURATION_TICKS;
     const completed = isQuestComplete(quest);
 
     if (completed) {
@@ -270,7 +272,7 @@ export function getActiveQuests(world: WorldState): ActiveQuestState[] {
 }
 
 export function isQuestExpired(world: WorldState, quest: ActiveQuestState): boolean {
-  return world.tick - quest.startedAtTick >= 6000;
+  return world.tick - quest.startedAtTick >= QUEST_DURATION_TICKS;
 }
 
 export function isQuestComplete(quest: ActiveQuestState): boolean {
