@@ -80,11 +80,24 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
       lineTo: vi.fn(),
       strokePath: vi.fn(),
       destroy: vi.fn(),
+      clear: vi.fn(),
+      setAlpha: vi.fn(),
+      setPosition: vi.fn(),
+      setVisible: vi.fn(),
+      strokeRect: vi.fn(),
     };
     scene.add = {
       sprite: vi.fn((_: number, __: number, texture: string) => {
         spriteCalls.push({ texture });
-        return { setDepth: vi.fn(), setName: vi.fn(), destroy: vi.fn() };
+        return { 
+          setDepth: vi.fn(), 
+          setName: vi.fn(), 
+          destroy: vi.fn(),
+          setScale: vi.fn(),
+          setTexture: vi.fn(),
+          setPosition: vi.fn(),
+          setDisplaySize: vi.fn(),
+        };
       }),
       image: vi.fn(() => ({ destroy: vi.fn() })),
       graphics: vi.fn(() => mockGraphics),
@@ -127,12 +140,21 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
       lineTo: vi.fn(),
       strokePath: vi.fn(),
       destroy: vi.fn(),
+      clear: vi.fn(),
+      setAlpha: vi.fn(),
+      setPosition: vi.fn(),
+      setVisible: vi.fn(),
+      strokeRect: vi.fn(),
     };
     scene.add = {
       sprite: vi.fn(() => ({
         setDepth: vi.fn(),
         setName: (n: string) => { setNameCalls.push(n); },
         destroy: vi.fn(() => { destroyCount.value++; }),
+        setScale: vi.fn(),
+        setTexture: vi.fn(),
+        setPosition: vi.fn(),
+        setDisplaySize: vi.fn(),
       })),
       image: vi.fn(() => ({ destroy: vi.fn() })),
       graphics: vi.fn(() => mockGraphics),
@@ -184,6 +206,11 @@ describe("FactoryScene.renderTerrainTilemap", () => {
       lineTo: vi.fn(),
       strokePath: vi.fn(),
       destroy: vi.fn(),
+      clear: vi.fn(),
+      setAlpha: vi.fn(),
+      setPosition: vi.fn(),
+      setVisible: vi.fn(),
+      strokeRect: vi.fn(),
     };
     scene.add = {
       image: vi.fn((_: number, __: number, texture: string) => {
@@ -192,7 +219,7 @@ describe("FactoryScene.renderTerrainTilemap", () => {
       }),
       sprite: vi.fn((_: number, __: number, texture: string) => {
         spritesCreated.push(texture);
-        return { setDepth: vi.fn((d: number) => { setDepthCalls.push(d); }), destroy: vi.fn() };
+        return { setDepth: vi.fn((d: number) => { setDepthCalls.push(d); }), destroy: vi.fn(), setScale: vi.fn(), setTexture: vi.fn(), setPosition: vi.fn(), setDisplaySize: vi.fn() };
       }),
       graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
@@ -238,10 +265,15 @@ describe("FactoryScene.renderTerrainTilemap", () => {
       lineTo: vi.fn(),
       strokePath: vi.fn(),
       destroy: vi.fn(),
+      clear: vi.fn(),
+      setAlpha: vi.fn(),
+      setPosition: vi.fn(),
+      setVisible: vi.fn(),
+      strokeRect: vi.fn(),
     };
     scene.add = {
       image: vi.fn((_: number, __: number, texture: string) => { imagesCreated.push(texture); return { destroy: vi.fn() }; }),
-      sprite: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn() })),
+      sprite: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn(), setScale: vi.fn(), setTexture: vi.fn(), setPosition: vi.fn(), setDisplaySize: vi.fn() })),
       graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;

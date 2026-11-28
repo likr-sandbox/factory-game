@@ -19,6 +19,11 @@ const mockGraphics = {
   lineTo: vi.fn(),
   strokePath: vi.fn(),
   destroy: vi.fn(),
+  clear: vi.fn(),
+  setAlpha: vi.fn(),
+  setPosition: vi.fn(),
+  setVisible: vi.fn(),
+  strokeRect: vi.fn(),
 };
 
 const mockSprite = {
@@ -561,12 +566,9 @@ describe("FactoryScene syncWorld overlays", () => {
       expect(scene["depletedOverlays"].size).toBe(1);
       expect(scene["depletedOverlays"].has("depleted_5_5")).toBe(true);
 
-      // Verify graphics methods were called for X indicator
-      expect(mockGraphics.lineStyle).toHaveBeenCalled();
-      expect(mockGraphics.beginPath).toHaveBeenCalled();
-      expect(mockGraphics.moveTo).toHaveBeenCalled();
-      expect(mockGraphics.lineTo).toHaveBeenCalled();
-      expect(mockGraphics.strokePath).toHaveBeenCalled();
+      // Verify graphics methods were called for X indicator (using fillCircles)
+      expect(mockGraphics.fillStyle).toHaveBeenCalled();
+      expect(mockGraphics.fillCircle).toHaveBeenCalled();
     });
 
     it("should NOT render depleted overlay for deposits with remaining > 0", () => {
@@ -714,7 +716,7 @@ describe("FactoryScene syncWorld overlays", () => {
 });
 
 describe("PlacementGhost", () => {
-  let mockScene: { add: { sprite: ReturnType<typeof vi.fn> }; textures: { createCanvas: ReturnType<typeof vi.fn> } };
+  let mockScene: { add: { sprite: ReturnType<typeof vi.fn>; graphics: ReturnType<typeof vi.fn> }; textures: { createCanvas: ReturnType<typeof vi.fn> } };
   let ghostSprite: {
     setAlpha: ReturnType<typeof vi.fn>;
     setDepth: ReturnType<typeof vi.fn>;
@@ -738,6 +740,16 @@ describe("PlacementGhost", () => {
     mockScene = {
       add: {
         sprite: vi.fn().mockReturnValue(ghostSprite),
+        graphics: vi.fn(() => ({
+          clear: vi.fn(),
+          setAlpha: vi.fn(),
+          fillRect: vi.fn(),
+          fillCircle: vi.fn(),
+          fillStyle: vi.fn(),
+          setPosition: vi.fn(),
+          destroy: vi.fn(),
+          strokeRect: vi.fn(),
+        })),
       },
       textures: {
         createCanvas: vi.fn().mockReturnValue({
