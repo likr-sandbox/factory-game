@@ -1,332 +1,61 @@
-// Procedural 32x32 building sprite drawers for pixel-art rendering
-// Uses only palette colors - no external images
+// Building sprite dispatcher - re-exports from specialized modules
+// Slim integration layer maintaining backward-compatible public API
 
 import type { BuildingType, Direction } from "../../sim/types";
-import { getBuildingColor, UI_PALETTE } from "../palette";
+import { getBuildingColor } from "../palette";
 
-const W = 32;
-const H = 32;
+// Import draw* functions from logistics, machines, and hub modules
+import {
+  drawBelt,
+  drawSplitter,
+  drawFilterSplitter,
+  drawUndergroundBelt,
+} from "./logistics";
 
-/** Draw a single pixel */
-function px(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, 1, 1);
-}
+import {
+  drawMiner,
+  drawSmelter,
+  drawAssembler,
+  drawRecycler,
+  drawSensor,
+} from "./machines";
 
-/** Fill rect with color */
-function fill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, w, h);
-}
+import { drawHub } from "./hub";
 
-// ============================================================================
-// Base building shapes (direction-agnostic foundations)
-// ============================================================================
+// Re-export draw* functions for backward compatibility
+export {
+  drawBelt,
+  drawSplitter,
+  drawFilterSplitter,
+  drawUndergroundBelt,
+} from "./logistics";
 
-function drawMinerBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("miner").css;
-  // Main body 20x20 centered
-  fill(ctx, 6, 6, 20, 20, base);
-  // Darker border
-  fill(ctx, 7, 7, 18, 18, "rgb(45, 85, 205)");
-  fill(ctx, 8, 8, 16, 16, base);
-  // Inner detail
-  fill(ctx, 11, 11, 10, 10, "rgb(80, 120, 240)");
-}
+export {
+  drawMiner,
+  drawSmelter,
+  drawAssembler,
+  drawRecycler,
+  drawSensor,
+} from "./machines";
 
-function drawBeltBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("belt").css;
-  // Belt platform 24x8 or 8x24 depending on direction handled in main
-  fill(ctx, 4, 12, 24, 8, base);
-  fill(ctx, 5, 13, 22, 6, "rgb(198, 92, 194)");
-}
+export { drawHub } from "./hub";
 
-function drawSplitterBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("splitter").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(235, 79, 51)");
-  // Y-split pattern
-  fill(ctx, 15, 8, 2, 16, "rgb(255, 150, 130)");
-  fill(ctx, 8, 15, 16, 2, "rgb(255, 150, 130)");
-}
-
-function drawFilterSplitterBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("filter_splitter").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(235, 10, 127)");
-  // Filter indicator lines
-  fill(ctx, 10, 10, 12, 2, "rgb(255, 180, 220)");
-  fill(ctx, 10, 14, 12, 2, "rgb(255, 180, 220)");
-}
-
-function drawUndergroundBeltBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("underground_belt").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(0, 180, 189)");
-  // Tunnel entrance
-  fill(ctx, 10, 10, 12, 12, "rgb(0, 150, 159)");
-  fill(ctx, 12, 12, 8, 8, "rgb(0, 220, 229)");
-}
-
-function drawSmelterBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("smelter").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(200, 10, 50)");
-  // Furnace opening
-  fill(ctx, 10, 10, 12, 12, "rgb(40, 20, 10)");
-}
-
-function drawAssemblerBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("assembler").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(30, 185, 30)");
-  // Gear symbol center
-  fill(ctx, 13, 13, 6, 6, "rgb(100, 200, 100)");
-}
-
-function drawRecyclerBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("recycler").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(166, 65, 191)");
-  // Recycle arrows hint
-  fill(ctx, 11, 11, 10, 10, "rgb(210, 130, 230)");
-}
-
-function drawSensorBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("sensor").css;
-  fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(0, 235, 235)");
-  // Lens center
-  fill(ctx, 12, 12, 8, 8, "rgb(100, 255, 255)");
-  fill(ctx, 14, 14, 4, 4, "rgb(200, 255, 255)");
-}
-
-function drawHubBase(ctx: CanvasRenderingContext2D) {
-  const base = getBuildingColor("hub").css;
-  fill(ctx, 4, 4, 24, 24, base);
-  fill(ctx, 6, 6, 20, 20, "rgb(235, 50, 20)");
-  fill(ctx, 8, 8, 16, 16, "rgb(255, 120, 80)");
-  // Central emblem
-  fill(ctx, 12, 12, 8, 8, "rgb(255, 200, 150)");
-}
-
-// ============================================================================
-// Direction indicators
-// ============================================================================
-
-function drawDirectionIndicator(ctx: CanvasRenderingContext2D, dir: Direction) {
-  const arrowColor = "rgb(255, 255, 255)";
-  const shadowColor = "rgba(0,0,0,0.5)";
-  
-  switch (dir) {
-    case "N":
-      // Up arrow at top
-      fill(ctx, 14, 2, 4, 2, shadowColor);
-      fill(ctx, 15, 3, 2, 2, arrowColor);
-      fill(ctx, 14, 4, 4, 2, arrowColor);
-      fill(ctx, 13, 5, 6, 2, arrowColor);
-      break;
-    case "E":
-      // Right arrow at right
-      fill(ctx, 26, 14, 2, 4, shadowColor);
-      fill(ctx, 25, 15, 2, 2, arrowColor);
-      fill(ctx, 24, 14, 2, 4, arrowColor);
-      fill(ctx, 23, 13, 2, 6, arrowColor);
-      break;
-    case "S":
-      // Down arrow at bottom
-      fill(ctx, 14, 28, 4, 2, shadowColor);
-      fill(ctx, 15, 27, 2, 2, arrowColor);
-      fill(ctx, 14, 25, 4, 2, arrowColor);
-      fill(ctx, 13, 24, 6, 2, arrowColor);
-      break;
-    case "W":
-      // Left arrow at left
-      fill(ctx, 4, 14, 2, 4, shadowColor);
-      fill(ctx, 5, 15, 2, 2, arrowColor);
-      fill(ctx, 6, 14, 2, 4, arrowColor);
-      fill(ctx, 7, 13, 2, 6, arrowColor);
-      break;
-  }
-}
-
-// ============================================================================
-// Animation overlays
-// ============================================================================
-
-function drawBeltStripes(ctx: CanvasRenderingContext2D, frame: number, dir: Direction) {
-  const stripeColor = "rgba(255,255,255,0.4)";
-  const offset = (frame * 4) % 16;
-  
-  if (dir === "N" || dir === "S") {
-    // Vertical belt stripes
-    for (let i = 0; i < 4; i++) {
-      const y = ((i * 8) + offset) % 24 + 12;
-      if (y >= 12 && y <= 19) {
-        fill(ctx, 6, Math.floor(y), 20, 1, stripeColor);
-      }
-    }
-  } else {
-    // Horizontal belt stripes
-    for (let i = 0; i < 4; i++) {
-      const x = ((i * 8) + offset) % 24 + 4;
-      if (x >= 4 && x <= 25) {
-        fill(ctx, Math.floor(x), 12, 1, 8, stripeColor);
-      }
-    }
-  }
-}
-
-function drawMinerBlade(ctx: CanvasRenderingContext2D, frame: number) {
-  const bladeColor = "rgb(180, 180, 200)";
-  // Rotating blade effect
-  if (frame === 0) {
-    fill(ctx, 10, 14, 12, 4, bladeColor);
-    fill(ctx, 14, 10, 4, 12, bladeColor);
-  } else {
-    fill(ctx, 10, 12, 12, 8, bladeColor);
-  }
-}
-
-function drawSmelterFlame(ctx: CanvasRenderingContext2D, frame: number) {
-  const flame1 = "rgb(255, 100, 0)";
-  const flame2 = "rgb(255, 200, 50)";
-  const flame3 = "rgb(255, 255, 100)";
-  
-  // Flickering flame in furnace opening
-  if (frame === 0) {
-    fill(ctx, 12, 14, 8, 6, flame1);
-    fill(ctx, 14, 12, 4, 4, flame2);
-    fill(ctx, 15, 11, 2, 2, flame3);
-  } else {
-    fill(ctx, 12, 15, 8, 5, flame1);
-    fill(ctx, 13, 13, 6, 4, flame2);
-    fill(ctx, 15, 12, 2, 3, flame3);
-  }
-}
-
-function drawFaultBadge(ctx: CanvasRenderingContext2D) {
-  const warnColor = UI_PALETTE.warning.css;
-  const faultColor = UI_PALETTE.fault.css;
-  
-  // Warning triangle badge at top-right corner
-  fill(ctx, 18, 2, 12, 10, warnColor);
-  fill(ctx, 19, 3, 10, 8, faultColor);
-  // Exclamation mark
-  fill(ctx, 23, 5, 2, 4, "white");
-  fill(ctx, 23, 10, 2, 2, "white");
-}
-
-// ============================================================================
-// Main drawer functions for each building type
-// ============================================================================
-
-export function drawMiner(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawMinerBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  drawMinerBlade(ctx, frame);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawBelt(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  // Rotate belt orientation based on direction
-  if (dir === "N" || dir === "S") {
-    // Vertical belt
-    fill(ctx, 12, 4, 8, 24, getBuildingColor("belt").css);
-    fill(ctx, 13, 5, 6, 22, "rgb(198, 92, 194)");
-  } else {
-    // Horizontal belt
-    fill(ctx, 4, 12, 24, 8, getBuildingColor("belt").css);
-    fill(ctx, 5, 13, 22, 6, "rgb(198, 92, 194)");
-  }
-  drawDirectionIndicator(ctx, dir);
-  drawBeltStripes(ctx, frame, dir);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawSplitter(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawSplitterBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawFilterSplitter(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawFilterSplitterBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawUndergroundBelt(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawUndergroundBeltBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  // Scroll indicator for underground
-  const scrollColor = "rgba(255,255,255,0.3)";
-  const offset = (frame * 3) % 8;
-  fill(ctx, 14, 14 + offset, 4, 2, scrollColor);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawSmelter(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawSmelterBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  drawSmelterFlame(ctx, frame);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawAssembler(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawAssemblerBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  // Slight pulsing effect
-  if (frame > 0) {
-    fill(ctx, 12, 12, 8, 8, "rgb(120, 220, 120)");
-  }
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawRecycler(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawRecyclerBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  // Rotating recycle hint
-  if (frame === 0) {
-    fill(ctx, 10, 12, 12, 2, "rgb(210, 130, 230)");
-  } else {
-    fill(ctx, 12, 10, 2, 12, "rgb(210, 130, 230)");
-  }
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawSensor(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawSensorBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  // Scanning beam in direction
-  const beamColor = "rgba(200, 255, 255, 0.6)";
-  if (dir === "N") fill(ctx, 14, 0, 4, 6, beamColor);
-  else if (dir === "E") fill(ctx, 26, 14, 6, 4, beamColor);
-  else if (dir === "S") fill(ctx, 14, 26, 4, 6, beamColor);
-  else if (dir === "W") fill(ctx, 2, 14, 6, 4, beamColor);
-  if (faulted) drawFaultBadge(ctx);
-}
-
-export function drawHub(ctx: CanvasRenderingContext2D, dir: Direction, frame: number, faulted: boolean) {
-  drawHubBase(ctx);
-  drawDirectionIndicator(ctx, dir);
-  // Crown/top detail
-  fill(ctx, 10, 2, 12, 4, "rgb(255, 220, 180)");
-  if (faulted) drawFaultBadge(ctx);
-}
-
-// ============================================================================
-// Texture key helper
-// ============================================================================
-
-export function getBuildingTextureKey(type: BuildingType, direction: Direction, frame: number): string {
+/**
+ * Get a unique texture key for a building variant.
+ * Used for caching sprites in the game engine.
+ */
+export function getBuildingTextureKey(
+  type: BuildingType,
+  direction: Direction,
+  frame: number
+): string {
   return `${type}_${direction}_${frame}`;
 }
 
-// ============================================================================
-// Generic drawer dispatcher
-// ============================================================================
-
+/**
+ * Generic building drawer dispatcher.
+ * Routes to the appropriate draw* function based on building type.
+ */
 export function drawBuilding(
   ctx: CanvasRenderingContext2D,
   type: BuildingType,
@@ -335,15 +64,25 @@ export function drawBuilding(
   faulted: boolean
 ): void {
   switch (type) {
-    case "miner": drawMiner(ctx, dir, frame, faulted); break;
-    case "belt": drawBelt(ctx, dir, frame, faulted); break;
-    case "splitter": drawSplitter(ctx, dir, frame, faulted); break;
-    case "filter_splitter": drawFilterSplitter(ctx, dir, frame, faulted); break;
-    case "underground_belt": drawUndergroundBelt(ctx, dir, frame, faulted); break;
-    case "smelter": drawSmelter(ctx, dir, frame, faulted); break;
-    case "assembler": drawAssembler(ctx, dir, frame, faulted); break;
-    case "recycler": drawRecycler(ctx, dir, frame, faulted); break;
-    case "sensor": drawSensor(ctx, dir, frame, faulted); break;
-    case "hub": drawHub(ctx, dir, frame, faulted); break;
+    case "miner":
+      return drawMiner(ctx, dir, frame, faulted);
+    case "belt":
+      return drawBelt(ctx, dir, frame, faulted);
+    case "splitter":
+      return drawSplitter(ctx, dir, frame, faulted);
+    case "filter_splitter":
+      return drawFilterSplitter(ctx, dir, frame, faulted);
+    case "underground_belt":
+      return drawUndergroundBelt(ctx, dir, frame, faulted);
+    case "smelter":
+      return drawSmelter(ctx, dir, frame, faulted);
+    case "assembler":
+      return drawAssembler(ctx, dir, frame, faulted);
+    case "recycler":
+      return drawRecycler(ctx, dir, frame, faulted);
+    case "sensor":
+      return drawSensor(ctx, dir, frame, faulted);
+    case "hub":
+      return drawHub(ctx, dir, frame, faulted);
   }
 }
