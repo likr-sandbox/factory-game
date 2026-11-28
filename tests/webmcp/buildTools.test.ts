@@ -158,7 +158,7 @@ describe("createBuildToolHandlers", () => {
 
   it("should successfully unlock a tech with sufficient research points", () => {
     const world = createWorld(42);
-    world.researchPoints = 200; // Enough for underground_belt (cost: 150)
+    world.researchPoints = 200; // Enough for underground_belt (cost: 80)
     let mutated = false;
     const handlers = createBuildToolHandlers(() => world, () => { mutated = true; });
 
@@ -170,7 +170,7 @@ describe("createBuildToolHandlers", () => {
     }
     expect(mutated).toBe(true);
     // Research points should be deducted
-    expect(world.researchPoints).toBe(50); // 200 - 150
+    expect(world.researchPoints).toBe(120); // 200 - 80
     expect(world.unlockedTechs).toContain("underground_belt");
   });
 
@@ -206,6 +206,88 @@ describe("createBuildToolHandlers", () => {
     if (!result.success) {
       expect(result.error.code).toBe("INVALID_INPUT");
     }
+  });
+
+  it("should return PREREQUISITE_NOT_MET error when prerequisites are missing", () => {
+    const world = createWorld(42);
+    world.researchPoints = 200; // Enough for recycler cost but missing prereqs
+    const handlers = createBuildToolHandlers(() => world);
+
+    // recycler requires filter_splitter as prerequisite
+    const result = handlers.unlock_tech({ techId: "recycler" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("PREREQUISITE_NOT_MET");
+      expect(result.error.message).toContain("filter_splitter");
+      expect((result.error.details as { techId?: string; missingPrerequisites?: string[] }).techId).toBe("recycler");
+      expect((result.error.details as { techId?: string; missingPrerequisites?: string[] }).missingPrerequisites).toContain("filter_splitter");
+    }
+  });
+
+  it("should succeed after unlocking prerequisites first via WebMCP handler", () => {
+    const world = createWorld(42);
+    world.researchPoints = 200;
+    let mutated = false;
+    const handlers = createBuildToolHandlers(() => world, () => { mutated = true; });
+
+    // First unlock filter_splitter (no prerequisites)
+    const prereqResult = handlers.unlock_tech({ techId: "filter_splitter" });
+    expect(prereqResult.success).toBe(true);
+    expect(mutated).toBe(true);
+    expect(world.researchPoints).toBe(140); // 200 - 60
+    
+    mutated = false;
+    // Now recycler should work
+    const result = handlers.unlock_tech({ techId: "recycler" });
+    expect(result.success).toBe(true);
+    expect(mutated).toBe(true);
+    if (result.success) {
+      expect(result.changes).toEqual({ unlockedTech: "recycler" });
+    }
+    expect(world.researchPoints).toBe(40); // 140 - 100
+    expect(world.unlockedTechs).toContain("recycler");
+  });
+
+  it("should return PREREQUISITE_NOT_MET for multi-level dependencies", () => {
+    const world = createWorld(42);
+    world.researchPoints = 1000;
+    const handlers = createBuildToolHandlers(() => world);
+
+    // automation requires electronics, which requires advanced_smelting
+    const result = handlers.unlock_tech({ techId: "automation" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe("PREREQUISITE_NOT_MET");
+      expect((result.error.details as { missingPrerequisites?: string[] }).missingPrerequisites).toContain("electronics");
+    }
+  });
+
+  it("should succeed after unlocking full prerequisite chain via WebMCP handler", () => {
+    const world = createWorld(42);
+    world.researchPoints = 1000;
+    let mutated = false;
+    const handlers = createBuildToolHandlers(() => world, () => { mutated = true; });
+
+    // Unlock advanced_smelting first (no prerequisites)
+    const r1 = handlers.unlock_tech({ techId: "advanced_smelting" });
+    expect(r1.success).toBe(true);
+    expect(mutated).toBe(true);
+    expect(world.researchPoints).toBe(850); // 1000 - 150
+    
+    mutated = false;
+    // Then unlock electronics (requires advanced_smelting)
+    const r2 = handlers.unlock_tech({ techId: "electronics" });
+    expect(r2.success).toBe(true);
+    expect(mutated).toBe(true);
+    expect(world.researchPoints).toBe(630); // 850 - 220
+    
+    mutated = false;
+    // Finally unlock automation (requires electronics)
+    const r3 = handlers.unlock_tech({ techId: "automation" });
+    expect(r3.success).toBe(true);
+    expect(mutated).toBe(true);
+    expect(world.researchPoints).toBe(230); // 630 - 400
+    expect(world.unlockedTechs).toContain("automation");
   });
 
   it("should not call onWorldMutated when unlock_tech fails", () => {

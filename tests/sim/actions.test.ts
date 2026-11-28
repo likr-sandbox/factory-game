@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createWorld } from "../../src/sim/world";
 import { placeBuilding, placeBeltLine, removeArea, setRecipe, batchActions, unlockTechAction } from "../../src/sim/actions";
-import { isBuildingUnlocked, isRecipeUnlocked, unlockTech } from "../../src/sim/progression";
+import { isBuildingUnlocked, isRecipeUnlocked, unlockTech, type TechId } from "../../src/sim/progression";
 import type { WorldState, Direction, BatchActionItem, ActionResult, ActionResultSuccess, ActionResultFailure } from "../../src/sim/types";
 
 interface RemoveAreaChanges { removedCount: number; }
@@ -359,28 +359,103 @@ describe("unlockTechAction", () => {
   beforeEach(() => { world = createWorld(42); });
 
   it("should successfully unlock a tech with sufficient points", () => {
-    world.researchPoints = 300;
+    world.researchPoints = 400;
+    // First unlock advanced_smelting (prerequisite for electronics)
+    const prereqResult = unlockTechAction(world, "advanced_smelting");
+    expect(prereqResult.success).toBe(true);
+    expect(world.researchPoints).toBe(250); // 400 - 150
+    
+    // Now unlock electronics
     const result = unlockTechAction(world, "electronics");
     expect(result.success).toBe(true);
     const success = getSuccessResult(result);
     expect(success.changes).toEqual({ unlockedTech: "electronics" });
     expect(world.unlockedTechs).toContain("electronics");
-    expect(world.researchPoints).toBe(0); // 300 - 300 cost
+    expect(world.researchPoints).toBe(30); // 250 - 220 cost
   });
 
   it("should fail with INSUFFICIENT_POINTS when not enough research points", () => {
-    world.researchPoints = 100;
-    const result = unlockTechAction(world, "electronics"); // costs 300
+    world.researchPoints = 50;
+    const result = unlockTechAction(world, "underground_belt"); // costs 80, no prereqs
     expect(result.success).toBe(false);
     expect(getFailureResult(result).error.code).toBe("INSUFFICIENT_POINTS");
   });
 
-  it("should allow placing building after unlocking via unlockTechAction", () => {
-    world.researchPoints = 300;
+  it("should fail with PREREQUISITE_NOT_MET when prerequisites are missing", () => {
+    // recycler requires filter_splitter as prerequisite
+    world.researchPoints = 200;
+    const result = unlockTechAction(world, "recycler");
+    expect(result.success).toBe(false);
+    const failure = getFailureResult(result);
+    expect(failure.error.code).toBe("PREREQUISITE_NOT_MET");
+    expect(failure.error.message).toContain("filter_splitter");
+    expect((failure.error.details as { techId?: string; missingPrerequisites?: TechId[] }).techId).toBe("recycler");
+    expect((failure.error.details as { techId?: string; missingPrerequisites?: TechId[] }).missingPrerequisites).toContain("filter_splitter");
+  });
+
+  it("should succeed after unlocking prerequisites first", () => {
+    // recycler requires filter_splitter (cost: 60), then recycler costs 100
+    world.researchPoints = 200;
     
-    // Unlock electronics via action
+    // First unlock filter_splitter (no prerequisites)
+    const prereqResult = unlockTechAction(world, "filter_splitter");
+    expect(prereqResult.success).toBe(true);
+    expect(world.researchPoints).toBe(140); // 200 - 60
+    
+    // Now recycler should work
+    const result = unlockTechAction(world, "recycler");
+    expect(result.success).toBe(true);
+    const success = getSuccessResult(result);
+    expect(success.changes).toEqual({ unlockedTech: "recycler" });
+    expect(world.researchPoints).toBe(40); // 140 - 100
+  });
+
+  it("should fail with PREREQUISITE_NOT_MET for multi-level dependencies", () => {
+    // automation requires electronics, which requires advanced_smelting
+    world.researchPoints = 1000;
+    
+    // Try to unlock automation without prerequisites
+    const result = unlockTechAction(world, "automation");
+    expect(result.success).toBe(false);
+    const failure = getFailureResult(result);
+    expect(failure.error.code).toBe("PREREQUISITE_NOT_MET");
+    expect((failure.error.details as { missingPrerequisites?: TechId[] }).missingPrerequisites).toContain("electronics");
+  });
+
+  it("should succeed after unlocking full prerequisite chain", () => {
+    // automation requires electronics (220) which requires advanced_smelting (150), automation costs 400
+    world.researchPoints = 1000;
+    
+    // Unlock advanced_smelting first (no prerequisites)
+    const r1 = unlockTechAction(world, "advanced_smelting");
+    expect(r1.success).toBe(true);
+    expect(world.researchPoints).toBe(850); // 1000 - 150
+    
+    // Then unlock electronics (requires advanced_smelting)
+    const r2 = unlockTechAction(world, "electronics");
+    expect(r2.success).toBe(true);
+    expect(world.researchPoints).toBe(630); // 850 - 220
+    
+    // Finally unlock automation (requires electronics)
+    const r3 = unlockTechAction(world, "automation");
+    expect(r3.success).toBe(true);
+    expect(world.researchPoints).toBe(230); // 630 - 400
+    expect(world.unlockedTechs).toContain("automation");
+  });
+
+  it("should allow placing building after unlocking via unlockTechAction", () => {
+    world.researchPoints = 400;
+    
+    // Unlock electronics via action (requires advanced_smelting first)
+    // First unlock advanced_smelting (cost: 150)
+    const prereqResult = unlockTechAction(world, "advanced_smelting");
+    expect(prereqResult.success).toBe(true);
+    expect(world.researchPoints).toBe(250); // 400 - 150
+    
+    // Now unlock electronics (cost: 220)
     const unlockResult = unlockTechAction(world, "electronics");
     expect(unlockResult.success).toBe(true);
+    expect(world.researchPoints).toBe(30); // 250 - 220
     
     // Now should be able to place assembler
     const placeResult = placeBuilding(world, { x: 10, y: 10, type: "assembler", direction: "N", recipeId: "iron_gear" });
@@ -388,16 +463,16 @@ describe("unlockTechAction", () => {
   });
 
   it("should deduct correct cost for different techs", () => {
-    // underground_belt costs 150
+    // underground_belt costs 80
     world.researchPoints = 200;
     let result = unlockTechAction(world, "underground_belt");
     expect(result.success).toBe(true);
-    expect(world.researchPoints).toBe(50);
+    expect(world.researchPoints).toBe(120);
     
-    // filter_splitter costs 100
+    // filter_splitter costs 60
     world.researchPoints = 150;
     result = unlockTechAction(world, "filter_splitter");
     expect(result.success).toBe(true);
-    expect(world.researchPoints).toBe(50);
+    expect(world.researchPoints).toBe(90);
   });
 });

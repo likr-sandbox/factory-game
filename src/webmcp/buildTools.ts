@@ -3,6 +3,7 @@
 
 import type { WorldState, ActionResult } from "../sim/types";
 import type { MutateToolName } from "./types";
+import { TECH_CATALOG } from "../sim/catalog";
 import { placeBuilding, placeBeltLine, removeArea, setRecipe, batchActions, unlockTechAction } from "../sim/actions";
 
 /**
@@ -117,12 +118,8 @@ export function createBuildToolHandlers(
       return { success: false, error: { code: "INVALID_INPUT", message: "techId must be a string" } };
     }
 
-    const validTechIds: string[] = [
-      "underground_belt", "filter_splitter", "high_efficiency",
-      "sensor", "recycler", "advanced_smelting", "electronics", "automation"
-    ];
-
-    if (!validTechIds.includes(techId)) {
+    // Validate tech exists in TECH_CATALOG
+    if (!TECH_CATALOG[techId]) {
       return { success: false, error: { code: "INVALID_TECH", message: `Unknown tech ID: ${techId}`, details: { techId } } };
     }
 
