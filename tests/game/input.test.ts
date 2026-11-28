@@ -212,4 +212,66 @@ describe("Input Controller", () => {
       expect(b.faulted).toBe(false);
     });
   });
+
+  describe("handleTileClick - auto recipe application", () => {
+    it("should auto-apply iron_plate default recipe when placing smelter with null selectedRecipe", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "smelter"; s.selectedRecipe = null;
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("smelter");
+      expect(building.recipeId).toBe("iron_plate");
+    });
+
+    it("should auto-apply iron_gear default recipe when placing assembler with null selectedRecipe", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "assembler"; s.selectedRecipe = null;
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("assembler");
+      expect(building.recipeId).toBe("iron_gear");
+    });
+
+    it("should auto-apply iron_plate when placing smelter with mismatched assembler recipe selected", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "smelter"; s.selectedRecipe = "iron_gear";
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("smelter");
+      expect(building.recipeId).toBe("iron_plate"); // Auto-corrected to smelter default
+    });
+
+    it("should auto-apply iron_gear when placing assembler with mismatched smelter recipe selected", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "assembler"; s.selectedRecipe = "iron_plate";
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("assembler");
+      expect(building.recipeId).toBe("iron_gear"); // Auto-corrected to assembler default
+    });
+
+    it("should use matching unlocked recipe when selectedRecipe matches building type", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "smelter"; s.selectedRecipe = "copper_plate";
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("smelter");
+      expect(building.recipeId).toBe("copper_plate"); // Used selected recipe since it matches
+    });
+
+    it("should auto-apply default when selectedRecipe is for wrong building type even if unlocked", () => {
+      const s = createInputState(); s.mode = "place"; s.selectedBuilding = "assembler"; s.selectedRecipe = "copper_plate";
+      const r = handleTileClick(world, s, 10, 10);
+      expect(r.success).toBe(true);
+      const t = world.tiles[10]![10]!;
+      const building = world.buildings[t.buildingId!]!;
+      expect(building.type).toBe("assembler");
+      expect(building.recipeId).toBe("iron_gear"); // Auto-corrected since copper_plate is for smelter
+    });
+  });
 });

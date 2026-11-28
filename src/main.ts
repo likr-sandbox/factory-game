@@ -9,6 +9,7 @@ import { stepTick } from "./sim/engine";
 import { createPhaserConfig } from "./game/config";
 import { FactoryScene } from "./game/FactoryScene";
 import { createInputState, type InputState, repairBuilding, applyRecipe } from "./game/input";
+import { setRecipe } from "./sim/actions";
 import { mountHud, type HudHandle } from "./ui/hud";
 import { mountPaletteBar, type PaletteBarHandle } from "./ui/paletteBar";
 import { createInspector, type InspectorHandle } from "./ui/inspector";
@@ -168,6 +169,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
+      scene?.centerCameraOnHub();
     },
   });
 
@@ -176,6 +178,12 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     onBuildingSelect: (building) => {
       inputState.selectedBuilding = building;
       inputState.mode = "place";
+      // Sync selectedRecipe to building's default unlocked recipe if needed
+      if (building === "smelter" && inputState.selectedRecipe !== "iron_plate") {
+        inputState.selectedRecipe = "iron_plate";
+      } else if (building === "assembler" && inputState.selectedRecipe !== "iron_gear") {
+        inputState.selectedRecipe = "iron_gear";
+      }
       // Immediately sync and check if building is unlocked using read-only check
       paletteBar?.sync(activeWorld, inputState);
       if (!isBuildingUnlocked(activeWorld, building)) {
@@ -226,6 +234,18 @@ export function initGame(doc: Document = globalThis.document as Document): void 
         paletteBar?.setFeedback(null);
       }
       // Sync all UI components immediately
+      scene?.syncWorld(activeWorld);
+      hud?.update(activeWorld);
+      paletteBar?.sync(activeWorld, inputState);
+      inspector?.update(activeWorld, inputState.inspectedCoord);
+    },
+    onSetFilter: (x, y, material) => {
+      const result = setRecipe(activeWorld, { x, y, filterMaterial: material ?? undefined });
+      if (!result.success) {
+        paletteBar?.setFeedback(formatActionErrorJa(result.error.code));
+      } else {
+        paletteBar?.setFeedback(null);
+      }
       scene?.syncWorld(activeWorld);
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
@@ -291,6 +311,13 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     hud?.update(activeWorld);
     paletteBar?.sync(activeWorld, inputState);
     inspector?.update(activeWorld, inputState.inspectedCoord);
+    paletteBar?.setFeedback(null); // Clear feedback on successful mutation
+  });
+
+  // Subscribe to actionFailed events to display error messages
+  scene?.events?.on?.("actionFailed", (err: unknown) => {
+    const errorCode = (err as { code?: string })?.code;
+    paletteBar?.setFeedback(formatActionErrorJa(errorCode));
   });
 
   // Start animation loop
