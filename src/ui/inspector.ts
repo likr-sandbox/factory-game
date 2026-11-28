@@ -34,7 +34,7 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
   const doc = container.ownerDocument;
   const panel = doc.createElement("div");
   panel.className = "inspector-panel";
-  panel.style.cssText = "background:rgba(22,33,62,0.95);border:2px solid #4a4a6a;border-radius:8px;padding:12px;min-width:220px;max-width:320px;color:#eaeaea;font-family:'Segoe UI',sans-serif";
+  panel.style.cssText = "background:rgba(22,33,62,0.95);border:2px solid #4a4a6a;border-radius:8px;padding:12px;min-width:220px;color:#eaeaea;font-family:'Segoe UI',sans-serif";
   container.appendChild(panel);
 
   const infoDiv = doc.createElement("div");
@@ -86,6 +86,7 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
 
   let currentCoord: { x: number; y: number } | null = null;
   let lastPopulatedType: "smelter" | "assembler" | null = null;
+  let filterMaterialsPopulated = false;
 
   function populateRecipes(buildingType: "smelter" | "assembler"): void {
     recipeSelect.innerHTML = "";
@@ -177,6 +178,7 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
       sensorAlertLabel.style.display = sensorAlertInfo.style.display = "none";
       if (building.type !== lastPopulatedType) {
         populateRecipes(building.type);
+        lastPopulatedType = building.type;
       }
       const desiredValue = building.recipeId ?? "";
       if (recipeSelect.value !== desiredValue) {
@@ -186,7 +188,16 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
       recipeLabel.style.display = recipeSelect.style.display = "none";
       filterLabel.style.display = filterSelect.style.display = "block";
       sensorAlertLabel.style.display = sensorAlertInfo.style.display = "none";
-      populateFilterMaterials();
+      if (!filterMaterialsPopulated) {
+        populateFilterMaterials();
+        filterMaterialsPopulated = true;
+      }
+      // Set current filter material value
+      const currentFilter = building.filterMaterial ?? "";
+      if (filterSelect.value !== currentFilter) {
+        filterSelect.value = currentFilter;
+      }
+      lastPopulatedType = null;
     } else if (building.type === "sensor" && coord) {
       recipeLabel.style.display = recipeSelect.style.display = "none";
       filterLabel.style.display = filterSelect.style.display = "none";

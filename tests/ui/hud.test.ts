@@ -13,6 +13,7 @@ class MockElement {
   public id: string = "";
   public parentNode: MockElement | null = null;
   public ownerDocument: MockDocument | null = null;
+  public disabled: boolean = false;
 
   appendChild(child: MockElement): void { child.parentNode = this; this.children.push(child); }
   removeChild(child: MockElement): void { const idx = this.children.indexOf(child); if (idx !== -1) { this.children.splice(idx, 1); child.parentNode = null; } }
@@ -323,7 +324,9 @@ describe("mountHud", () => {
 
   it("should create 8 tech buttons on mount for all TECH_CATALOG entries", () => {
     const handle = mountHud(container as unknown as HTMLElement);
-    handle.update(makeWorld());
+    const world = makeWorld();
+    world.researchPoints = 1000; // 十分な RP
+    handle.update(world);
     
     const techTreeEl = container.children[0]!.children[7]!;
     const buttons = techTreeEl.querySelectorAll(".tech-btn");
@@ -331,9 +334,9 @@ describe("mountHud", () => {
     // Should have exactly 8 tech buttons
     expect(buttons.length).toBe(8);
     
-    // Check expected tech labels exist (no space before parenthesis)
+    // Check expected tech labels exist (with RP cost)
     const texts = buttons.map(b => b.textContent);
-    expect(texts[0]).toBe("フィルター分配機 (アンロック)");
+    expect(texts[0]).toBe("フィルター分配機 (100RP)");
     expect(texts.length).toBe(8);
     
     handle.destroy();
@@ -393,7 +396,24 @@ describe("mountHud", () => {
     
     const questsEl = container.children[0]!.children[8]!;
     expect(questsEl.textContent).toContain("鉄板 5/15");
-    expect(questsEl.textContent).toContain("鉄板 5/15");
+    
+    handle.destroy();
+  });
+
+  it("should disable tech buttons and show '不足' when RP is insufficient", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.researchPoints = 50; // Less than filter_splitter cost (100)
+    handle.update(world);
+    
+    const techTreeEl = container.children[0]!.children[7]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    
+    // filter_splitter button should be disabled with "不足" text
+    const filterSplitterBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("フィルター分配機"));
+    expect(filterSplitterBtn).toBeDefined();
+    expect(filterSplitterBtn!.disabled).toBe(true);
+    expect(filterSplitterBtn!.textContent).toContain("不足");
     
     handle.destroy();
   });

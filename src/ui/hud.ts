@@ -290,18 +290,26 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
         const unlockedTechs = new Set(world.unlockedTechs || []);
         
         // Update each tech button
-        const updateTechBtn = (techId: string, unlocked: boolean, subKey?: string) => {
+        const updateTechBtn = (techId: string, unlocked: boolean) => {
           const entry = techButtonMap[techId];
           if (!entry) return;
           const { btn, cost } = entry;
+          const techLabel = TECH_BUTTONS.find(t => t.techId === techId)?.label || techId;
+          
           if (unlocked) {
             btn.disabled = true;
             btn.style.display = "none";
+          } else if ((world.researchPoints ?? 0) < cost) {
+            // RP不足で無効化
+            btn.disabled = true;
+            btn.style.display = "";
+            btn.textContent = `${techLabel} (${cost}RP - 不足)`;
+            btn.title = `${techLabel} - RP コスト：${cost}（現在：${world.researchPoints ?? 0}）`;
           } else {
             btn.disabled = false;
             btn.style.display = "";
-            btn.textContent = `${TECH_BUTTONS.find(t => t.techId === techId)?.label} (アンロック)`;
-            btn.title = `${TECH_BUTTONS.find(t => t.techId === techId)?.label} - RP コスト：${cost}`;
+            btn.textContent = `${techLabel} (${cost}RP)`;
+            btn.title = `${techLabel} - RP コスト：${cost}`;
           }
         };
         
