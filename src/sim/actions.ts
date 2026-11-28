@@ -5,8 +5,9 @@ import type { WorldState, Tile, BuildingState, ActionResult, ActionError, Direct
 import type { PlaceBuildingInput, PlaceBeltLineInput, RemoveAreaInput, SetRecipeInput, BatchActionsInput, BatchActionItem } from "./types";
 import { BUILDING_CATALOG } from "./catalog";
 import { RECIPE_CATALOG } from "./catalog";
+import { TECH_CATALOG } from "./catalog";
 import { inBounds, getTile, isHubTile, directionDelta, oppositeDirection } from "./world";
-import { isBuildingUnlocked, isRecipeUnlocked, unlockTech, type TechId } from "./progression";
+import { isBuildingUnlocked, isRecipeUnlocked, unlockTech, getMissingPrerequisites, type TechId } from "./progression";
 
 // ============================================================================
 // placeBuilding
@@ -470,13 +471,23 @@ export function unlockTechAction(
   world: WorldState,
   techId: TechId
 ): ActionResult {
-  const validTechIds: TechId[] = [
-    "underground_belt", "filter_splitter", "high_efficiency",
-    "sensor", "recycler", "advanced_smelting", "electronics", "automation"
-  ];
-  
-  if (!validTechIds.includes(techId)) {
+  // Validate tech exists in TECH_CATALOG
+  const tech = TECH_CATALOG[techId];
+  if (!tech) {
     return { success: false, error: { code: "INVALID_TECH", message: `Unknown tech ID: ${techId}`, details: { techId } } };
+  }
+
+  // Check prerequisites
+  const missingPrerequisites = getMissingPrerequisites(world, techId);
+  if (missingPrerequisites.length > 0) {
+    return { 
+      success: false, 
+      error: { 
+        code: "PREREQUISITE_NOT_MET", 
+        message: `Tech ${techId} requires prerequisites: ${missingPrerequisites.join(", ")}`, 
+        details: { techId, missingPrerequisites } 
+      } 
+    };
   }
 
   const unlocked = unlockTech(world, techId);

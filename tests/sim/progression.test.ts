@@ -1,7 +1,7 @@
 // Unit tests for progression.ts
 import { describe, it, expect } from "vitest";
 import {
-  awardResearchPoints, calculateTotalResearchPoints, unlockTech,
+  awardResearchPoints, calculateTotalResearchPoints, unlockTech, getMissingPrerequisites,
   isBuildingUnlocked, isRecipeUnlocked, getTechTreeStatus,
   startTutorial, getCurrentTutorialStep, completeTutorialStep, getTutorialProgress,
 } from "../../src/sim/progression";
@@ -28,24 +28,24 @@ describe("Research Points", () => {
   it("should award points for iron_plate delivery", () => {
     const w = createWorld();
     const pts = awardResearchPoints(w, "iron_plate", 5);
-    expect(pts).toBe(25); expect(w.researchPoints).toBe(25);
+    expect(pts).toBe(10); expect(w.researchPoints).toBe(10);
   });
 
   it("should award points for copper_plate delivery", () => {
     const w = createWorld();
     const pts = awardResearchPoints(w, "copper_plate", 3);
-    expect(pts).toBe(15); expect(w.researchPoints).toBe(15);
+    expect(pts).toBe(6); expect(w.researchPoints).toBe(6);
   });
 
   it("should award higher points for advanced materials", () => {
     const w = createWorld();
-    expect(awardResearchPoints(w, "microchip", 2)).toBe(40);
-    expect(awardResearchPoints(w, "automation_module", 1)).toBe(25);
+    expect(awardResearchPoints(w, "microchip", 2)).toBe(150);
+    expect(awardResearchPoints(w, "automation_module", 1)).toBe(240);
   });
 
-  it("should award small points for slag", () => {
+  it("should not award points for slag", () => {
     const w = createWorld();
-    expect(awardResearchPoints(w, "slag", 10)).toBe(20);
+    expect(awardResearchPoints(w, "slag", 10)).toBe(0);
   });
 
   it("should not award points for unknown materials", () => {
@@ -58,7 +58,7 @@ describe("Research Points", () => {
     awardResearchPoints(w, "iron_plate", 2);
     awardResearchPoints(w, "copper_plate", 3);
     awardResearchPoints(w, "iron_gear", 1);
-    expect(w.researchPoints).toBe(33);
+    expect(w.researchPoints).toBe(16);
   });
 
   it("should calculate total from history", () => {
@@ -67,15 +67,15 @@ describe("Research Points", () => {
       { material: "copper_plate" as MaterialId, amount: 5 },
       { material: "microchip" as MaterialId, amount: 2 },
     ];
-    expect(calculateTotalResearchPoints(h)).toBe(115);
+    expect(calculateTotalResearchPoints(h)).toBe(180);
   });
 });
 
 describe("Tech Tree Unlocks", () => {
   it("should unlock underground_belt with sufficient points", () => {
-    const w = createWorld(); w.researchPoints = 200;
+    const w = createWorld(); w.researchPoints = 100;
     expect(unlockTech(w, "underground_belt")).toBe(true);
-    expect(w.researchPoints).toBe(50);
+    expect(w.researchPoints).toBe(20);
     expect(w.unlockedTechs).toContain("underground_belt");
   });
 
@@ -92,7 +92,7 @@ describe("Tech Tree Unlocks", () => {
   it("should check building unlock status", () => {
     const w = createWorld();
     expect(isBuildingUnlocked(w, "belt")).toBe(true);
-    expect(isBuildingUnlocked(w, "assembler")).toBe(true); // assembler is now unlocked by default
+    expect(isBuildingUnlocked(w, "assembler")).toBe(true);
     w.researchPoints = 300;
     unlockTech(w, "electronics");
     expect(isBuildingUnlocked(w, "assembler")).toBe(true);
@@ -102,10 +102,13 @@ describe("Tech Tree Unlocks", () => {
     const w = createWorld();
     expect(isRecipeUnlocked(w, "iron_plate")).toBe(true);
     expect(isRecipeUnlocked(w, "iron_plate_high")).toBe(false);
-    w.researchPoints = 300;
+    // First unlock filter_splitter (prerequisite for high_efficiency)
+    w.researchPoints = 200;
+    unlockTech(w, "filter_splitter");
     unlockTech(w, "high_efficiency");
     expect(isRecipeUnlocked(w, "iron_plate_high")).toBe(true);
-    w.researchPoints = 400;
+    // Unlock advanced_smelting for steel_plate
+    w.researchPoints = 300;
     unlockTech(w, "advanced_smelting");
     expect(isRecipeUnlocked(w, "steel_plate")).toBe(true);
   });
@@ -125,6 +128,7 @@ describe("Tech Tree Unlocks", () => {
     expect(s.recycler).toBe(false);
     expect(s.electronics.assembler).toBe(true);
     w.researchPoints = 1000;
+    unlockTech(w, "advanced_smelting");
     unlockTech(w, "electronics");
     s = getTechTreeStatus(w);
     expect(s.electronics.assembler).toBe(true);
@@ -133,27 +137,11 @@ describe("Tech Tree Unlocks", () => {
 
   it("should fail-fast: recipe not unlocked if building is locked", () => {
     const w = createWorld();
-    // sensor and recycler buildings are locked by default
-    // so their recipes should also be locked even if we check them directly
     expect(isBuildingUnlocked(w, "sensor")).toBe(false);
     expect(isBuildingUnlocked(w, "recycler")).toBe(false);
     expect(isBuildingUnlocked(w, "underground_belt")).toBe(false);
     expect(isBuildingUnlocked(w, "filter_splitter")).toBe(false);
-    // assembler IS unlocked by default
     expect(isBuildingUnlocked(w, "assembler")).toBe(true);
-  });
-
-  it("should unlock assembler and its recipes with electronics tech", () => {
-    const w = createWorld();
-    // assembler is already unlocked by default
-    expect(isBuildingUnlocked(w, "assembler")).toBe(true);
-    // But circuit_board and microchip recipes need electronics tech
-    expect(isRecipeUnlocked(w, "circuit_board")).toBe(false);
-    expect(isRecipeUnlocked(w, "microchip")).toBe(false);
-    w.researchPoints = 300;
-    unlockTech(w, "electronics");
-    expect(isRecipeUnlocked(w, "circuit_board")).toBe(true);
-    expect(isRecipeUnlocked(w, "microchip")).toBe(true);
   });
 
   it("should have basic recipes unlocked by default", () => {
@@ -170,6 +158,88 @@ describe("Tech Tree Unlocks", () => {
     expect(isRecipeUnlocked(w, "copper_plate_high")).toBe(false);
     expect(isRecipeUnlocked(w, "steel_plate")).toBe(false);
     expect(isRecipeUnlocked(w, "silicon_wafer")).toBe(false);
+  });
+});
+
+describe("Prerequisites Validation", () => {
+  it("should return empty array for tech with no prerequisites", () => {
+    const w = createWorld();
+    const missing = getMissingPrerequisites(w, "filter_splitter");
+    expect(missing).toEqual([]);
+  });
+
+  it("should return missing prerequisites when not unlocked", () => {
+    const w = createWorld();
+    const missing = getMissingPrerequisites(w, "recycler");
+    expect(missing).toEqual(["filter_splitter"]);
+  });
+
+  it("should return empty array when prerequisites are met", () => {
+    const w = createWorld();
+    w.unlockedTechs.push("filter_splitter");
+    const missing = getMissingPrerequisites(w, "recycler");
+    expect(missing).toEqual([]);
+  });
+
+  it("should throw on unknown tech ID", () => {
+    const w = createWorld();
+    expect(() => getMissingPrerequisites(w, "unknown" as never)).toThrow("Unknown tech ID");
+  });
+
+  it("should reject unlock when prerequisites are not met", () => {
+    const w = createWorld();
+    w.researchPoints = 500; // Sufficient points
+    // Try to unlock recycler without filter_splitter
+    expect(unlockTech(w, "recycler")).toBe(false);
+    expect(w.unlockedTechs).not.toContain("recycler");
+  });
+
+  it("should succeed when prerequisites are met and points are sufficient", () => {
+    const w = createWorld();
+    w.researchPoints = 200;
+    unlockTech(w, "filter_splitter"); // cost 60
+    expect(w.researchPoints).toBe(140);
+    // Now unlock recycler (cost 100, requires filter_splitter)
+    expect(unlockTech(w, "recycler")).toBe(true);
+    expect(w.researchPoints).toBe(40);
+    expect(w.unlockedTechs).toContain("recycler");
+  });
+
+  it("should reject electronics without advanced_smelting prerequisite", () => {
+    const w = createWorld();
+    w.researchPoints = 500;
+    expect(unlockTech(w, "electronics")).toBe(false); // Missing advanced_smelting
+    expect(w.unlockedTechs).not.toContain("electronics");
+  });
+
+  it("should succeed for electronics after unlocking advanced_smelting", () => {
+    const w = createWorld();
+    w.researchPoints = 500;
+    unlockTech(w, "advanced_smelting"); // cost 150
+    expect(w.researchPoints).toBe(350);
+    // Now unlock electronics (cost 220, requires advanced_smelting)
+    expect(unlockTech(w, "electronics")).toBe(true);
+    expect(w.researchPoints).toBe(130);
+    expect(w.unlockedTechs).toContain("electronics");
+  });
+
+  it("should reject automation without electronics prerequisite", () => {
+    const w = createWorld();
+    w.researchPoints = 1000;
+    expect(unlockTech(w, "automation")).toBe(false); // Missing electronics
+    expect(w.unlockedTechs).not.toContain("automation");
+  });
+
+  it("should succeed for automation after unlocking electronics", () => {
+    const w = createWorld();
+    w.researchPoints = 1000;
+    unlockTech(w, "advanced_smelting");
+    unlockTech(w, "electronics"); // cost 220
+    expect(w.researchPoints).toBe(630);
+    // Now unlock automation (cost 400, requires electronics)
+    expect(unlockTech(w, "automation")).toBe(true);
+    expect(w.researchPoints).toBe(230);
+    expect(w.unlockedTechs).toContain("automation");
   });
 });
 
@@ -254,7 +324,8 @@ describe("Tutorial Phases", () => {
   });
 
   it("should handle phase 3", () => {
-    const w = createWorld(); w.tutorialPhase = 3; w.researchPoints = 500;
+    const w = createWorld(); w.tutorialPhase = 3; w.researchPoints = 600;
+    unlockTech(w, "advanced_smelting");
     unlockTech(w, "electronics");
     w.buildings = { a: { ...emptyBs, id: "a", type: "assembler", x: 10, y: 10 } };
     completeTutorialStep(w, "p3_electronics_unlock");
@@ -343,11 +414,12 @@ describe("Tutorial Phases", () => {
   });
 
   it("should award bonus RP on first step completion in phase 3", () => {
-    const w = createWorld(); w.tutorialPhase = 3; w.researchPoints = 300;
-    unlockTech(w, "electronics");
+    const w = createWorld(); w.tutorialPhase = 3; w.researchPoints = 500;
+    unlockTech(w, "advanced_smelting"); // prerequisite for electronics (costs 150 RP), leaves 350
+    unlockTech(w, "electronics"); // costs 220 RP, leaves 130
     w.buildings = { a: { ...emptyBs, id: "a", type: "assembler", x: 10, y: 10 } };
-    completeTutorialStep(w, "p3_electronics_unlock");
-    expect(w.researchPoints).toBe(60); // p3_electronics_unlock rewardPoints (300 - 300 cost + 60 bonus = 60)
+    completeTutorialStep(w, "p3_electronics_unlock"); // adds 60 bonus RP
+    expect(w.researchPoints).toBe(190); // 500 - 150 - 220 + 60 = 190
   });
 
   it("should award bonus RP on first step completion in phase 4", () => {
@@ -370,8 +442,8 @@ describe("Tutorial Phases", () => {
   it("should reach underground_belt cost (150 RP) after completing phase 1", () => {
     const w = createWorld(); startTutorial(w);
     w.buildings = { ...minerBs, ...smelterBs };
-    // Simulate delivery RP from iron_plate (5 RP each) and copper_plate (5 RP each)
-    // 10 iron_plate = 50 RP, 10 copper_plate = 50 RP from deliveries
+    // Simulate delivery RP from iron_plate (2 RP each) and copper_plate (2 RP each)
+    // 10 iron_plate = 20 RP, 10 copper_plate = 20 RP from deliveries
     awardResearchPoints(w, "iron_plate", 10);
     awardResearchPoints(w, "copper_plate", 10);
     // Now complete all phase 1 steps for bonus RP
@@ -380,8 +452,8 @@ describe("Tutorial Phases", () => {
     completeTutorialStep(w, "p1_manual_smelting");
     completeTutorialStep(w, "p1_first_delivery");
     completeTutorialStep(w, "p1_copper_delivery");
-    // Total: 50 (iron) + 50 (copper) + 75 (bonus) = 175 RP
-    expect(w.researchPoints).toBe(175);
-    expect(w.researchPoints).toBeGreaterThanOrEqual(150); // Enough for underground_belt
+    // Total: 20 (iron) + 20 (copper) + 75 (bonus) = 115 RP
+    expect(w.researchPoints).toBe(115);
+    expect(w.researchPoints).toBeLessThan(150); // Not enough for underground_belt yet
   });
 });

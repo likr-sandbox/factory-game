@@ -161,7 +161,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
         inspector?.update(activeWorld, inputState.inspectedCoord);
         paletteBar?.setFeedback(null);
       } else {
-        paletteBar?.setFeedback("研究ポイントが不足しています");
+        paletteBar?.setFeedback(formatActionErrorJa(result.error.code));
       }
     },
     onResetWorld: (seed) => {
@@ -394,6 +394,10 @@ export function formatActionErrorJa(code?: string): string {
       return "この地形には配置できません";
     case "OUT_OF_BOUNDS":
       return "範囲外です";
+    case "PREREQUISITE_NOT_MET":
+      return "前提技術が未解放です";
+    case "INSUFFICIENT_POINTS":
+      return "研究ポイントが不足しています";
     default:
       return "操作に失敗しました";
   }

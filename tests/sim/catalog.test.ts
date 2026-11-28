@@ -11,6 +11,7 @@ import {
   MIN_INPUT_BUFFER_PER_MATERIAL,
   INPUT_BUFFER_MULTIPLIER,
 } from "../../src/sim/catalog";
+import { RESEARCH_POINTS } from "../../src/sim/progression";
 import * as Buffers from "../../src/sim/buffers";
 import type { MaterialId, BuildingType, RecipeId, BuildingState, BeltItem } from "../../src/sim/types";
 
@@ -338,15 +339,26 @@ describe("Tech Catalog", () => {
     }
   });
 
-  it("should have correct costs matching TECH_COSTS in progression.ts", () => {
-    expect(TECH_CATALOG["filter_splitter"]!.cost).toBe(100);
-    expect(TECH_CATALOG["underground_belt"]!.cost).toBe(150);
-    expect(TECH_CATALOG["high_efficiency"]!.cost).toBe(200);
-    expect(TECH_CATALOG["sensor"]!.cost).toBe(150);
-    expect(TECH_CATALOG["recycler"]!.cost).toBe(200);
-    expect(TECH_CATALOG["advanced_smelting"]!.cost).toBe(200);
-    expect(TECH_CATALOG["electronics"]!.cost).toBe(300);
-    expect(TECH_CATALOG["automation"]!.cost).toBe(500);
+  it("should have correct costs matching specification", () => {
+    expect(TECH_CATALOG["filter_splitter"]!.cost).toBe(60);
+    expect(TECH_CATALOG["underground_belt"]!.cost).toBe(80);
+    expect(TECH_CATALOG["sensor"]!.cost).toBe(80);
+    expect(TECH_CATALOG["recycler"]!.cost).toBe(100);
+    expect(TECH_CATALOG["high_efficiency"]!.cost).toBe(120);
+    expect(TECH_CATALOG["advanced_smelting"]!.cost).toBe(150);
+    expect(TECH_CATALOG["electronics"]!.cost).toBe(220);
+    expect(TECH_CATALOG["automation"]!.cost).toBe(400);
+  });
+
+  it("should have correct prerequisites for each tech", () => {
+    expect(TECH_CATALOG["filter_splitter"]!.prerequisites).toEqual([]);
+    expect(TECH_CATALOG["underground_belt"]!.prerequisites).toEqual([]);
+    expect(TECH_CATALOG["sensor"]!.prerequisites).toEqual([]);
+    expect(TECH_CATALOG["recycler"]!.prerequisites).toEqual(["filter_splitter"]);
+    expect(TECH_CATALOG["high_efficiency"]!.prerequisites).toEqual(["filter_splitter"]);
+    expect(TECH_CATALOG["advanced_smelting"]!.prerequisites).toEqual([]);
+    expect(TECH_CATALOG["electronics"]!.prerequisites).toEqual(["advanced_smelting"]);
+    expect(TECH_CATALOG["automation"]!.prerequisites).toEqual(["electronics"]);
   });
 
   it("should have correct unlocks for each tech", () => {
@@ -358,7 +370,7 @@ describe("Tech Catalog", () => {
     expect(TECH_CATALOG["recycler"]!.unlocks).toContain("recycler");
     expect(TECH_CATALOG["advanced_smelting"]!.unlocks).toContain("steel_plate");
     expect(TECH_CATALOG["advanced_smelting"]!.unlocks).toContain("silicon_wafer");
-    expect(TECH_CATALOG["electronics"]!.unlocks).toContain("assembler");
+    expect(TECH_CATALOG["electronics"]!.unlocks).not.toContain("assembler");
     expect(TECH_CATALOG["electronics"]!.unlocks).toContain("circuit_board");
     expect(TECH_CATALOG["electronics"]!.unlocks).toContain("microchip");
     expect(TECH_CATALOG["automation"]!.unlocks).toContain("automation_module");
@@ -716,5 +728,32 @@ describe("Buffers Module", () => {
       expect(transferred).toBe(2); // Only 2 more allowed to reach MAX_OUTPUT_BUFFER of 10
       expect(targetBuilding.inputBuffer["iron_plate"]).toBe(10);
     });
+  });
+});
+
+describe("Research Points Value Verification", () => {
+  it("should have slag with 0 RP value", () => {
+    expect(RESEARCH_POINTS["slag"]).toBe(0);
+  });
+
+  it("should have positive RP values for all production materials except slag", () => {
+    const materials: MaterialId[] = ["iron_plate", "copper_plate", "iron_gear", "copper_wire",
+      "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module"];
+    for (const mat of materials) {
+      expect(RESEARCH_POINTS[mat]).toBeGreaterThan(0);
+    }
+  });
+
+  it("should have higher RP values for more advanced materials", () => {
+    // automation_module should have highest RP value
+    expect(RESEARCH_POINTS["automation_module"]).toBe(240);
+    // microchip should be second highest
+    expect(RESEARCH_POINTS["microchip"]).toBe(75);
+    // circuit_board should be higher than basic materials
+    expect(RESEARCH_POINTS["circuit_board"]).toBe(24);
+    // Basic materials should have lower values
+    expect(RESEARCH_POINTS["iron_plate"]).toBe(2);
+    expect(RESEARCH_POINTS["copper_plate"]).toBe(2);
+    expect(RESEARCH_POINTS["copper_wire"]).toBe(2);
   });
 });

@@ -3,10 +3,9 @@
 
 import type { WorldState, MaterialId } from "../sim/types";
 import { getFactorySummary } from "../sim/query";
-import { getTutorialProgress, getTechTreeStatus } from "../sim/progression";
-import { getActiveQuests, getQuestProgress } from "../sim/quests";
-import { QUEST_DURATION_TICKS } from "../sim/quests";
-import { MATERIAL_CATALOG } from "../sim/catalog";
+import { getTutorialProgress, getTechTreeStatus, getMissingPrerequisites, type TechId } from "../sim/progression";
+import { QUEST_DURATION_TICKS, getActiveQuests, getQuestProgress } from "../sim/quests";
+import { MATERIAL_CATALOG, TECH_CATALOG } from "../sim/catalog";
 import { TICKS_PER_MINUTE } from "../sim/constants";
 
 export interface HudOptions {
@@ -30,18 +29,6 @@ let speedToClass: Record<SpeedValue, string> = {
   2: "speed-2",
   4: "speed-4",
 };
-
-// Tech button catalog - 8 techs
-const TECH_BUTTONS: Array<{ techId: string; label: string; cost: number }> = [
-  { techId: "filter_splitter", label: "フィルター分配機", cost: 100 },
-  { techId: "underground_belt", label: "交差ブリッジ", cost: 150 },
-  { techId: "high_efficiency", label: "高効率製錬", cost: 200 },
-  { techId: "sensor", label: "センサー", cost: 150 },
-  { techId: "recycler", label: "不純物処理炉", cost: 200 },
-  { techId: "advanced_smelting", label: "高度精錬技術", cost: 200 },
-  { techId: "electronics", label: "電子工業", cost: 300 },
-  { techId: "automation", label: "自動化研究", cost: 500 },
-];
 
 export function mountHud(container: HTMLElement, options: HudOptions = {}): HudHandle {
   const doc = container.ownerDocument;
@@ -148,20 +135,6 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   techDrawerEl.style.display = "none";
   techDrawerEl.setAttribute("aria-hidden", "true");
 
-  // Create 8 tech buttons once on mount
-  const techButtonMap: Record<string, HTMLButtonElement> = {};
-  for (const t of TECH_BUTTONS) {
-    const btn = doc.createElement("button");
-    btn.className = "tech-btn";
-    btn.textContent = `${t.label} (${t.cost}RP)`;
-    btn.title = `${t.label} - RP コスト：${t.cost}`;
-    btn.addEventListener("click", () => {
-      options.onUnlockTech?.(t.techId);
-    });
-    techButtonMap[t.techId] = btn;
-    techDrawerEl.appendChild(btn);
-  }
-
   // Seed toggle button
   const seedToggleBtn = doc.createElement("button");
   seedToggleBtn.className = "seed-toggle-btn";
@@ -214,6 +187,20 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
 
   container.appendChild(hudEl);
 
+  // Initialize tech buttons for all TECH_CATALOG entries (one-time generation)
+  const techButtonMap: Record<string, { btn: HTMLButtonElement }> = {};
+  for (const [techId, tech] of Object.entries(TECH_CATALOG)) {
+    const btn = doc.createElement("button");
+    btn.className = "tech-btn";
+    btn.textContent = `${tech.nameJa} (アンロック)`;
+    btn.title = `${tech.nameJa} - RP コスト：${tech.cost}`;
+    btn.addEventListener("click", () => {
+      options.onUnlockTech?.(techId as keyof typeof TECH_CATALOG);
+    });
+    techButtonMap[techId] = { btn };
+    techDrawerEl.appendChild(btn);
+  }
+
   // Append popovers to container (absolute positioned)
   container.appendChild(techDrawerEl);
   container.appendChild(seedPopoverEl);
@@ -236,9 +223,13 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   function countUnlockableTechs(world: WorldState): number {
     const unlockedTechs = new Set(world.unlockedTechs || []);
     let count = 0;
-    for (const t of TECH_BUTTONS) {
-      if (!unlockedTechs.has(t.techId) && (world.researchPoints ?? 0) >= t.cost) {
-        count++;
+    for (const [techId, tech] of Object.entries(TECH_CATALOG)) {
+      if (!unlockedTechs.has(techId) && (world.researchPoints ?? 0) >= tech.cost) {
+        // Check prerequisites - only count if all prereqs are met
+        const missingPrereqs = getMissingPrerequisites(world, techId as TechId);
+        if (missingPrereqs.length === 0) {
+          count++;
+        }
       }
     }
     return count;
@@ -309,7 +300,9 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
 
       // Update tech tree buttons non-destructively
       const unlockedTechs = new Set(world.unlockedTechs || []);
-      const allUnlocked = TECH_BUTTONS.every(t => unlockedTechs.has(t.techId));
+      
+      // Check if all techs are unlocked
+      const allUnlocked = Object.keys(TECH_CATALOG).every(techId => unlockedTechs.has(techId));
       
       if (allUnlocked) {
         // All techs unlocked - hide the tech drawer
@@ -318,37 +311,59 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
       } else {
         techToggleBtn.style.display = "";
         // Non-destructive update: disable buttons and update labels/costs
-        for (const t of TECH_BUTTONS) {
-          const btn = techButtonMap[t.techId];
-          if (!btn) continue;
+        
+        // Update each tech button
+        const updateTechBtn = (techId: string) => {
+          const entry = techButtonMap[techId];
+          if (!entry) return;
+          const { btn } = entry;
+          const tech = TECH_CATALOG[techId];
+          if (!tech) return; // Guard against missing catalog entry
+          const cost = tech.cost;
           
-          if (unlockedTechs.has(t.techId)) {
+          // Check for missing prerequisites
+          const missingPrereqs = getMissingPrerequisites(world, techId as TechId);
+          
+          if (unlockedTechs.has(techId)) {
+            // Already unlocked - hide button
             btn.disabled = true;
             btn.style.display = "none";
-          } else if ((world.researchPoints ?? 0) < t.cost) {
+          } else if (missingPrereqs.length > 0) {
+            // Prerequisites not met - disable with prerequisite message
+            btn.disabled = true;
+            btn.style.display = "";
+            const prereqLabels = missingPrereqs.map(p => TECH_CATALOG[p]?.nameJa ?? p).join(", ");
+            btn.textContent = `${tech.nameJa} (要:${prereqLabels})`;
+            btn.title = `${tech.nameJa} - 前提技術：${prereqLabels}（未解放）`;
+          } else if ((world.researchPoints ?? 0) < cost) {
             // RP 不足で無効化
             btn.disabled = true;
             btn.style.display = "";
-            btn.textContent = `${t.label} (${t.cost}RP - 不足)`;
-            btn.title = `${t.label} - RP コスト：${t.cost}（現在：${world.researchPoints ?? 0}）`;
+            btn.textContent = `${tech.nameJa} (${cost}RP - 不足)`;
+            btn.title = `${tech.nameJa} - RP コスト：${cost}（現在：${world.researchPoints ?? 0}）`;
           } else {
             btn.disabled = false;
             btn.style.display = "";
-            btn.textContent = `${t.label} (${t.cost}RP)`;
-            btn.title = `${t.label} - RP コスト：${t.cost}`;
+            btn.textContent = `${tech.nameJa} (${cost}RP)`;
+            btn.title = `${tech.nameJa} - RP コスト：${cost}`;
           }
+        };
+        
+        // Update all tech buttons from TECH_CATALOG
+        for (const techId of Object.keys(TECH_CATALOG)) {
+          updateTechBtn(techId);
         }
-      }
 
-      // Update unlockable badge
-      const unlockableCount = countUnlockableTechs(world);
-      if (unlockableCount > 0 && !allUnlocked) {
-        techBadge.textContent = String(unlockableCount);
-        techBadge.style.display = "";
-        techToggleBtn.classList.add("has-unlockable");
-      } else {
-        techBadge.style.display = "none";
-        techToggleBtn.classList.remove("has-unlockable");
+        // Update unlockable badge
+        const unlockableCount = countUnlockableTechs(world);
+        if (unlockableCount > 0 && !allUnlocked) {
+          techBadge.textContent = String(unlockableCount);
+          techBadge.style.display = "";
+          techToggleBtn.classList.add("has-unlockable");
+        } else {
+          techBadge.style.display = "none";
+          techToggleBtn.classList.remove("has-unlockable");
+        }
       }
 
       // Update active quests with material names from MATERIAL_CATALOG

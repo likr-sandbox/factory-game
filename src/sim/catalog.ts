@@ -1,7 +1,7 @@
 // Catalog definitions for materials, buildings, recipes, techs, and quests
 // Pure TypeScript - ZERO imports or references to Phaser, window, document
 
-import type { MaterialId, BuildingType, RecipeId } from "./types";
+import type { MaterialId, BuildingType, RecipeId, TechId } from "./types";
 
 // ============================================================================
 // Balance Constants
@@ -195,6 +195,7 @@ export interface TechEntry {
   nameJa: string;
   description: string;
   cost: number;
+  prerequisites: TechId[];
   unlocks: string[]; // building types, recipe ids, or feature flags
 }
 
@@ -203,56 +204,64 @@ export const TECH_CATALOG: Record<string, TechEntry> = {
     id: "filter_splitter",
     nameJa: "フィルター分配機",
     description: "指定物質を自動選別する分配機をアンロック",
-    cost: 100,
+    cost: 60,
+    prerequisites: [],
     unlocks: ["filter_splitter"],
   },
   "underground_belt": {
     id: "underground_belt",
     nameJa: "交差ブリッジ",
     description: "ラインを跨ぐ長距離搬送ブリッジをアンロック",
-    cost: 150,
+    cost: 80,
+    prerequisites: [],
     unlocks: ["underground_belt"],
-  },
-  "high_efficiency": {
-    id: "high_efficiency",
-    nameJa: "高効率製錬",
-    description: "高効率鉄板・銅板レシピをアンロック",
-    cost: 200,
-    unlocks: ["iron_plate_high", "copper_plate_high"],
   },
   "sensor": {
     id: "sensor",
     nameJa: "流量・異常センサー",
     description: "流量・異常センサーをアンロック",
-    cost: 150,
+    cost: 80,
+    prerequisites: [],
     unlocks: ["sensor"],
   },
   "recycler": {
     id: "recycler",
     nameJa: "不純物処理炉",
     description: "不純物処理炉（リサイクラー）をアンロック",
-    cost: 200,
+    cost: 100,
+    prerequisites: ["filter_splitter"],
     unlocks: ["recycler"],
+  },
+  "high_efficiency": {
+    id: "high_efficiency",
+    nameJa: "高効率製錬",
+    description: "高効率鉄板・銅板レシピをアンロック",
+    cost: 120,
+    prerequisites: ["filter_splitter"],
+    unlocks: ["iron_plate_high", "copper_plate_high"],
   },
   "advanced_smelting": {
     id: "advanced_smelting",
     nameJa: "高度精錬技術",
     description: "鋼板・シリコンウェハレシピをアンロック",
-    cost: 200,
+    cost: 150,
+    prerequisites: [],
     unlocks: ["steel_plate", "silicon_wafer"],
   },
   "electronics": {
     id: "electronics",
     nameJa: "電子工業",
-    description: "電子基板・マイクロチップレシピと組立機をアンロック",
-    cost: 300,
-    unlocks: ["assembler", "circuit_board", "microchip"],
+    description: "電子基板・マイクロチップレシピをアンロック",
+    cost: 220,
+    prerequisites: ["advanced_smelting"],
+    unlocks: ["circuit_board", "microchip"],
   },
   "automation": {
     id: "automation",
     nameJa: "自動化研究",
     description: "自動化モジュールレシピをアンロック",
-    cost: 500,
+    cost: 400,
+    prerequisites: ["electronics"],
     unlocks: ["automation_module"],
   },
 };

@@ -14,6 +14,7 @@ class MockElement {
   public parentNode: MockElement | null = null;
   public ownerDocument: MockDocument | null = null;
   public disabled: boolean = false;
+  public title: string = "";
   public ariaExpanded: string = "";
   public ariaHidden: string = "";
 
@@ -43,7 +44,11 @@ class MockElement {
 }
 
 class MockDocument {
-  createElement(tag: string): MockElement { const el = new MockElement(); el.ownerDocument = this; return el; }
+  createElement(tag: string): MockElement { 
+    const el = new MockElement(); 
+    el.ownerDocument = this; 
+    return el; 
+  }
 }
 
 function makeWorld(): WorldState {
@@ -309,7 +314,7 @@ describe("mountHud", () => {
     expect(badge1!.style.display).toBe("none");
     expect(techToggleBtn1.className.includes("has-unlockable")).toBe(false);
     
-    // Test 2: RP = 1000, 8 techs affordable - badge should show "8"
+    // Test 2: RP = 1000, 4 techs affordable (no prereqs) - badge should show "4"
     const world2 = makeWorld();
     world2.researchPoints = 1000;
     world2.unlockedTechs = [];
@@ -319,10 +324,10 @@ describe("mountHud", () => {
     const badge2 = Array.from(techToggleBtn2.children).find((c: any) => c.className?.includes("tech-badge"));
     expect(badge2).toBeDefined();
     expect(badge2!.style.display).not.toBe("none");
-    expect(badge2!.textContent).toBe("8");
+    expect(badge2!.textContent).toBe("4");
     expect(techToggleBtn2.className.includes("has-unlockable")).toBe(true);
     
-    // Test 3: RP = 100, only filter_splitter (100RP) is affordable - badge should show "1"
+    // Test 3: RP = 100, 3 techs affordable (filter_splitter 60RP, underground_belt 80RP, sensor 80RP) - badge should show "3"
     const world3 = makeWorld();
     world3.researchPoints = 100;
     world3.unlockedTechs = [];
@@ -332,7 +337,7 @@ describe("mountHud", () => {
     const badge3 = Array.from(techToggleBtn3.children).find((c: any) => c.className?.includes("tech-badge"));
     expect(badge3).toBeDefined();
     expect(badge3!.style.display).not.toBe("none");
-    expect(badge3!.textContent).toBe("1");
+    expect(badge3!.textContent).toBe("3");
     expect(techToggleBtn3.className.includes("has-unlockable")).toBe(true);
     
     // Test 4: Some techs unlocked, remaining not affordable - badge should be hidden
@@ -346,6 +351,26 @@ describe("mountHud", () => {
     expect(badge4).toBeDefined();
     expect(badge4!.style.display).toBe("none");
     expect(techToggleBtn4.className.includes("has-unlockable")).toBe(false);
+    
+    handle.destroy();
+  });
+
+  it("should create 8 tech buttons on mount for all TECH_CATALOG entries", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.researchPoints = 1000; // 十分な RP
+    handle.update(world);
+    
+    const techDrawer = container.children[1]!;  // tech-drawer popover
+    const buttons = techDrawer.querySelectorAll(".tech-btn");
+    
+    // Should have exactly 8 tech buttons
+    expect(buttons.length).toBe(8);
+    
+    // Check expected tech labels exist (with RP cost from TECH_CATALOG)
+    const texts = buttons.map(b => b.textContent);
+    expect(texts[0]).toBe("フィルター分配機 (60RP)");
+    expect(texts.length).toBe(8);
     
     handle.destroy();
   });
@@ -481,7 +506,7 @@ describe("mountHud", () => {
   it("should disable tech buttons and show '不足' when RP is insufficient", () => {
     const handle = mountHud(container as unknown as HTMLElement);
     const world = makeWorld();
-    world.researchPoints = 50; // Less than filter_splitter cost (100)
+    world.researchPoints = 50; // Less than filter_splitter cost (60)
     handle.update(world);
     
     const techDrawer = container.children[1]!;  // tech-drawer popover
@@ -648,6 +673,104 @@ describe("mountHud", () => {
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     expect(buttons.length).toBe(8);
     
+    // Find specific buttons by their labels
+    const filterSplitterBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("フィルター分配機"));
+    const undergroundBeltBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("交差ブリッジ"));
+    const sensorBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("流量・異常センサー"));
+    const recyclerBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("不純物処理炉"));
+    
+    // Techs without prereqs should be enabled with RP cost
+    expect(filterSplitterBtn).toBeDefined();
+    expect(filterSplitterBtn!.disabled).toBe(false);
+    expect(filterSplitterBtn!.textContent).toBe("フィルター分配機 (60RP)");
+    
+    expect(undergroundBeltBtn).toBeDefined();
+    expect(undergroundBeltBtn!.disabled).toBe(false);
+    
+    expect(sensorBtn).toBeDefined();
+    expect(sensorBtn!.disabled).toBe(false);
+    
+    // Techs with prereqs should be disabled with "要:" message
+    expect(recyclerBtn).toBeDefined();
+    expect(recyclerBtn!.disabled).toBe(true);
+    expect(recyclerBtn!.textContent).toContain("要:");
+    
+    handle.destroy();
+  });
+
+  it("should disable tech buttons and show '要:' when prerequisites are not met", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = []; // No techs unlocked
+    world.researchPoints = 1000; // Sufficient RP
+    handle.update(world);
+    
+    const techDrawer = container.children[1]!;  // tech-drawer popover
+    const buttons = techDrawer.querySelectorAll(".tech-btn");
+    
+    // recycler requires filter_splitter, so it should be disabled with "要:" message
+    const recyclerBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("不純物処理炉"));
+    expect(recyclerBtn).toBeDefined();
+    expect(recyclerBtn!.disabled).toBe(true);
+    expect(recyclerBtn!.textContent).toContain("要:");
+    expect(recyclerBtn!.textContent).toContain("フィルター分配機");
+    
+    handle.destroy();
+  });
+
+  it("should show prerequisite tooltip in button title when prereqs are not met", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = []; // No techs unlocked
+    world.researchPoints = 1000;
+    handle.update(world);
+    
+    const techDrawer = container.children[1]!;  // tech-drawer popover
+    const buttons = techDrawer.querySelectorAll(".tech-btn");
+    
+    // electronics requires advanced_smelting
+    const electronicsBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("電子工業"));
+    expect(electronicsBtn).toBeDefined();
+    expect(electronicsBtn!.title).toContain("前提技術：");
+    expect(electronicsBtn!.title).toContain("高度精錬技術");
+    
+    handle.destroy();
+  });
+
+  it("should enable tech button when prerequisites are met but not yet unlocked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = ["filter_splitter"]; // Prereq for high_efficiency and recycler
+    world.researchPoints = 1000;
+    handle.update(world);
+    
+    const techDrawer = container.children[1]!;  // tech-drawer popover
+    const buttons = techDrawer.querySelectorAll(".tech-btn");
+    
+    // high_efficiency should now be enabled (prereq satisfied)
+    const highEffBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("高効率製錬"));
+    expect(highEffBtn).toBeDefined();
+    expect(highEffBtn!.disabled).toBe(false);
+    expect(highEffBtn!.textContent).toContain("120RP)");
+    
+    handle.destroy();
+  });
+
+  it("should hide unlocked tech buttons from display", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = ["filter_splitter"];
+    world.researchPoints = 1000;
+    handle.update(world);
+    
+    const techDrawer = container.children[1]!;  // tech-drawer popover
+    const buttons = techDrawer.querySelectorAll(".tech-btn");
+    
+    // filter_splitter button should be hidden
+    const filterSplitterBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("フィルター分配機"));
+    expect(filterSplitterBtn).toBeDefined();
+    expect(filterSplitterBtn!.style.display).toBe("none");
+    
     handle.destroy();
   });
 
@@ -661,9 +784,9 @@ describe("mountHud", () => {
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     const texts = buttons.map(b => b.textContent);
     
-    expect(texts).toContain("フィルター分配機 (100RP)");
-    expect(texts).toContain("交差ブリッジ (150RP)");
-    expect(texts).toContain("電子工業 (300RP)");
+    expect(texts).toContain("フィルター分配機 (60RP)");
+    expect(texts).toContain("交差ブリッジ (80RP)");
+    expect(texts).toContain("高度精錬技術 (150RP)");
     
     handle.destroy();
   });
