@@ -198,6 +198,9 @@ describe("mountHud", () => {
         stepIndex: 0,
         progress: { iron_plate: 10 },
         startedAtTick: 500,
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 15 },
+        rewardPoints: 50,
       } as ActiveQuestState,
     ];
     handle.update(world);
@@ -389,7 +392,9 @@ describe("mountHud", () => {
         stepIndex: 0,
         progress: { iron_plate: 5, copper_plate: 3 },
         startedAtTick: 500,
-        templateIndex: 0, // delivery_iron_plate template
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 15, copper_plate: 15 },
+        rewardPoints: 50,
       } as ActiveQuestState,
     ];
     handle.update(world);
