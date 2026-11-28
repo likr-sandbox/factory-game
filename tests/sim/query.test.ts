@@ -366,4 +366,147 @@ describe("Query Functions", () => {
       expect(metrics.spm).toBeGreaterThanOrEqual(0);
     });
   });
+
+  describe("Regression tests for issue21", () => {
+    describe("getFactorySummary activeCount", () => {
+      it("should count non-hub, non-faulted buildings as active", () => {
+        const world = createWorld(42);
+        
+        // Initially only hub exists
+        const summary1 = getFactorySummary(world);
+        expect(summary1.buildingCount).toBe(1);
+        expect(summary1.activeCount).toBe(0); // hub is excluded from activeCount
+        
+        // Add a miner
+        const resources = findResources(world, { material: "iron_ore", limit: 1 });
+        expect(resources.length).toBeGreaterThan(0);
+        placeBuilding(world, {
+          x: resources[0]!.x,
+          y: resources[0]!.y,
+          type: "miner",
+          direction: "E",
+        });
+        
+        const summary2 = getFactorySummary(world);
+        expect(summary2.buildingCount).toBe(2); // hub + miner
+        expect(summary2.activeCount).toBe(1); // miner is active (not hub, not faulted)
+        
+        // Add a belt
+        placeBuilding(world, {
+          x: resources[0]!.x + 1,
+          y: resources[0]!.y,
+          type: "belt",
+          direction: "E",
+        });
+        
+        const summary3 = getFactorySummary(world);
+        expect(summary3.buildingCount).toBe(3); // hub + miner + belt
+        expect(summary3.activeCount).toBe(2); // miner + belt are active
+      });
+
+      it("should exclude faulted buildings from activeCount", () => {
+        const world = createWorld(42);
+        
+        // Place a miner
+        const resources = findResources(world, { material: "iron_ore", limit: 1 });
+        placeBuilding(world, {
+          x: resources[0]!.x,
+          y: resources[0]!.y,
+          type: "miner",
+          direction: "E",
+        });
+        
+        let summary = getFactorySummary(world);
+        expect(summary.activeCount).toBe(1);
+        
+        // Fault the building by manually setting faulted flag
+        const buildingId = Object.keys(world.buildings).find(
+          id => world.buildings[id]?.type === "miner"
+        );
+        if (buildingId && world.buildings[buildingId]) {
+          world.buildings[buildingId].faulted = true;
+        }
+        
+        summary = getFactorySummary(world);
+        expect(summary.activeCount).toBe(0); // miner is now faulted
+        expect(summary.faultedCount).toBe(1);
+      });
+    });
+
+    describe("inspectRegion negative coordinates", () => {
+      it("should handle negative x coordinate", () => {
+        const world = createWorld(12345);
+        
+        // Request region starting at negative x
+        const entries = inspectRegion(world, { x: -5, y: 0, width: 10, height: 5 });
+        
+        // Should return tiles from x=0 to x=4 (5 tiles wide)
+        expect(entries.length).toBe(25); // 5 * 5
+        expect(entries[0]?.x).toBe(0);
+        expect(entries[entries.length - 1]?.x).toBeLessThan(5);
+      });
+
+      it("should handle negative y coordinate", () => {
+        const world = createWorld(12345);
+        
+        // Request region starting at negative y
+        const entries = inspectRegion(world, { x: 0, y: -5, width: 5, height: 10 });
+        
+        // Should return tiles from y=0 to y=4 (5 tiles tall)
+        expect(entries.length).toBe(25); // 5 * 5
+        expect(entries[0]?.y).toBe(0);
+        expect(entries[entries.length - 1]?.y).toBeLessThan(5);
+      });
+
+      it("should handle both negative x and y coordinates", () => {
+        const world = createWorld(12345);
+        
+        // Request region with both negative coordinates
+        const entries = inspectRegion(world, { x: -5, y: -5, width: 10, height: 10 });
+        
+        // Should return tiles from (0,0) to (4,4) = 25 tiles
+        expect(entries.length).toBe(25);
+        for (const entry of entries) {
+          expect(entry.x).toBeGreaterThanOrEqual(0);
+          expect(entry.x).toBeLessThan(5);
+          expect(entry.y).toBeGreaterThanOrEqual(0);
+          expect(entry.y).toBeLessThan(5);
+        }
+      });
+
+      it("should handle region completely outside bounds", () => {
+        const world = createWorld(12345);
+        
+        // Request region completely outside map
+        const entries = inspectRegion(world, { x: -50, y: -50, width: 10, height: 10 });
+        
+        // Should return empty array
+        expect(entries.length).toBe(0);
+      });
+
+      it("should include building filterMaterial when present", () => {
+        const world = createWorld(42);
+        
+        // Give enough research points and unlock filter_splitter tech
+        world.researchPoints = 200;
+        world.unlockedTechs.push("filter_splitter");
+        
+        // Place a filter splitter with filter material
+        const result = placeBuilding(world, {
+          x: 10,
+          y: 10,
+          type: "filter_splitter",
+          direction: "E",
+          filterMaterial: "iron_plate",
+        });
+        expect(result.success).toBe(true);
+        
+        const entries = inspectRegion(world, { x: 9, y: 9, width: 3, height: 3 });
+        const splitterEntry = entries.find((e: TileEntry) => e.x === 10 && e.y === 10);
+        
+        expect(splitterEntry?.building).toBeDefined();
+        expect(splitterEntry?.building?.filterMaterial).toBe("iron_plate");
+      });
+    });
+  });
 });

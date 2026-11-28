@@ -44,6 +44,7 @@ export interface TileEntry {
     faulted: boolean;
     inputCount: number;
     outputCount: number;
+    filterMaterial?: MaterialId;
   };
 }
 
@@ -103,7 +104,7 @@ const TICKS_PER_MINUTE = 600;
  */
 export function getFactorySummary(world: WorldState): FactorySummary {
   const buildings = Object.values(world.buildings);
-  const activeCount = buildings.filter(b => !b.faulted && b.load > 0).length;
+  const activeCount = buildings.filter(b => b.type !== "hub" && !b.faulted).length;
   const faultedCount = buildings.filter(b => b.faulted).length;
   const depletedMinerCount = buildings
     .filter(b => b.type === "miner")
@@ -144,18 +145,34 @@ export function inspectRegion(
   world: WorldState,
   params: { x: number; y: number; width: number; height: number }
 ): TileEntry[] {
-  let { x, y, width, height } = params;
+  const { x: reqX, y: reqY, width: reqWidth, height: reqHeight } = params;
 
-  // Clamp to map bounds
-  x = Math.max(0, Math.min(x, world.width - 1));
-  y = Math.max(0, Math.min(y, world.height - 1));
-  width = Math.min(width, MAX_REGION_DIM, world.width - x);
-  height = Math.min(height, MAX_REGION_DIM, world.height - y);
+  // Calculate the requested region boundaries
+  const reqEndX = reqX + reqWidth;
+  const reqEndY = reqY + reqHeight;
+
+  // Calculate intersection with valid map bounds [0, world.width) and [0, world.height)
+  const startX = Math.max(0, reqX);
+  const startY = Math.max(0, reqY);
+  const endX = Math.min(world.width, reqEndX);
+  const endY = Math.min(world.height, reqEndY);
+
+  // If region doesn't intersect with valid map area, return empty array
+  if (startX >= endX || startY >= endY) {
+    return [];
+  }
+
+  // Clamp dimensions to MAX_REGION_DIM after intersection calculation
+  const actualWidth = Math.min(endX - startX, MAX_REGION_DIM);
+  const actualHeight = Math.min(endY - startY, MAX_REGION_DIM);
+  
+  const finalEndX = startX + actualWidth;
+  const finalEndY = startY + actualHeight;
 
   const entries: TileEntry[] = [];
 
-  for (let ty = y; ty < y + height; ty++) {
-    for (let tx = x; tx < x + width; tx++) {
+  for (let ty = startY; ty < finalEndY; ty++) {
+    for (let tx = startX; tx < finalEndX; tx++) {
       const tile = world.tiles[ty]?.[tx];
       if (!tile) continue;
 
@@ -185,6 +202,7 @@ export function inspectRegion(
             faulted: building.faulted,
             inputCount,
             outputCount,
+            ...(building.filterMaterial && { filterMaterial: building.filterMaterial }),
           };
         }
       }

@@ -1,8 +1,10 @@
 // Dynamic delivery quests module for sim-quests
 // Pure TypeScript - ZERO imports or references to Phaser, window, document
 
-import type { WorldState, ActiveQuestState, MaterialId } from "./types";
+import type { WorldState, ActiveQuestState, MaterialId, RecipeId } from "./types";
 import { nextRandom } from "./world";
+import { RECIPE_CATALOG } from "./catalog";
+import { isRecipeUnlocked } from "./progression";
 
 // Quest templates covering required recipes: iron_plate, copper_plate, iron_gear, copper_wire, circuit_board, microchip, automation_module
 interface QuestTemplate {
@@ -34,21 +36,65 @@ export function generateDynamicQuest(world: WorldState): ActiveQuestState | null
     return null;
   }
 
+  // Build set of materials currently requested by active quests
+  const activeMaterials = new Set<MaterialId>();
+  for (const quest of world.activeQuests || []) {
+    const extQuest = quest as ExtendedActiveQuestState;
+    for (const material of Object.keys(quest.progress)) {
+      activeMaterials.add(material as MaterialId);
+    }
+  }
+
+  // Filter templates to only include those that:
+  // 1. Have at least one deliverable material that has a corresponding unlocked recipe
+  // 2. Don't duplicate materials already requested by active quests
+  const validTemplates = QUEST_TEMPLATES.filter((template) => {
+    const material = Object.keys(template.deliver)[0] as MaterialId;
+    
+    // Check if this material is already requested by an active quest
+    if (!material || activeMaterials.has(material)) {
+      return false;
+    }
+    
+    // Check if there's a recipe for this material and if it's unlocked
+    // Note: Not all materials have recipes (e.g., raw materials like iron_ore)
+    if (!(material in RECIPE_CATALOG)) {
+      return false;
+    }
+    
+    // Type assertion safe because we checked the key exists in RECIPE_CATALOG
+    const recipeId = material as RecipeId;
+    if (!isRecipeUnlocked(world, recipeId)) {
+      return false;
+    }
+    
+    return true;
+  });
+
+  // If no valid templates available, return null
+  if (validTemplates.length === 0) {
+    return null;
+  }
+
   const { value: randVal, nextState } = nextRandom(world.rngState);
   world.rngState = nextState;
 
-  const templateIndex = Math.floor(randVal * QUEST_TEMPLATES.length);
-  const template = QUEST_TEMPLATES[templateIndex]!;
+  // Select from valid templates only
+  const templateIndexInValid = Math.floor(randVal * validTemplates.length);
+  const selectedTemplate = validTemplates[templateIndexInValid]!;
+  
+  // Find the original index in QUEST_TEMPLATES for tracking
+  const originalTemplateIndex = QUEST_TEMPLATES.indexOf(selectedTemplate);
 
   const questState: ExtendedActiveQuestState = {
     questId: `quest_${world.nextQuestId ?? 0}`,
     stepIndex: 0,
     progress: {},
     startedAtTick: world.tick,
-    templateIndex,
+    templateIndex: originalTemplateIndex,
   };
 
-  for (const material of Object.keys(template.deliver)) {
+  for (const material of Object.keys(selectedTemplate.deliver)) {
     questState.progress[material] = 0;
   }
 
@@ -98,8 +144,11 @@ export function processQuests(world: WorldState): void {
     const expired = world.tick - quest.startedAtTick >= QUEST_DURATION_TICKS;
     const completed = isQuestComplete(quest);
 
-    if (expired || completed) {
+    if (completed) {
       completeQuest(world, quest);
+    } else if (expired) {
+      // Discard expired but not completed quests without rewards
+      // Do nothing - just don't add to remaining
     } else {
       remaining.push(quest);
     }
