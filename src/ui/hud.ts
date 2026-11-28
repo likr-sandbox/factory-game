@@ -237,7 +237,7 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
     const unlockedTechs = new Set(world.unlockedTechs || []);
     let count = 0;
     for (const t of TECH_BUTTONS) {
-      if (!unlockedTechs.has(t.techId)) {
+      if (!unlockedTechs.has(t.techId) && (world.researchPoints ?? 0) >= t.cost) {
         count++;
       }
     }

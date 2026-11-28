@@ -150,17 +150,59 @@ describe("mountHud", () => {
     handle.destroy();
   });
 
-  it("should show unlockable badge when there are unlockable techs", () => {
+  it("should show unlockable badge only when techs are affordable with current RP", () => {
     const handle = mountHud(container as unknown as HTMLElement);
-    const world = makeWorld();
-    world.unlockedTechs = ["electronics", "automation"]; // 6 techs still locked
-    handle.update(world);
     
-    const techToggleBtn = container.children[0]!.children[6]!;
-    expect(techToggleBtn.classList.add).toBeDefined();
-    // Badge should be visible
-    const badge = Array.from(techToggleBtn.children).find(c => c.className?.includes("tech-badge"));
-    expect(badge).toBeDefined();
+    // Test 1: RP = 0, no affordable techs - badge should be hidden
+    const world1 = makeWorld();
+    world1.researchPoints = 0;
+    world1.unlockedTechs = []; // All 8 techs locked but none affordable
+    handle.update(world1);
+    
+    const techToggleBtn1 = container.children[0]!.children[6]!;
+    const badge1 = Array.from(techToggleBtn1.children).find((c: any) => c.className?.includes("tech-badge"));
+    expect(badge1).toBeDefined();
+    expect(badge1!.style.display).toBe("none");
+    expect(techToggleBtn1.className.includes("has-unlockable")).toBe(false);
+    
+    // Test 2: RP = 1000, 8 techs affordable - badge should show "8"
+    const world2 = makeWorld();
+    world2.researchPoints = 1000;
+    world2.unlockedTechs = [];
+    handle.update(world2);
+    
+    const techToggleBtn2 = container.children[0]!.children[6]!;
+    const badge2 = Array.from(techToggleBtn2.children).find((c: any) => c.className?.includes("tech-badge"));
+    expect(badge2).toBeDefined();
+    expect(badge2!.style.display).not.toBe("none");
+    expect(badge2!.textContent).toBe("8");
+    expect(techToggleBtn2.className.includes("has-unlockable")).toBe(true);
+    
+    // Test 3: RP = 100, only filter_splitter (100RP) is affordable - badge should show "1"
+    const world3 = makeWorld();
+    world3.researchPoints = 100;
+    world3.unlockedTechs = [];
+    handle.update(world3);
+    
+    const techToggleBtn3 = container.children[0]!.children[6]!;
+    const badge3 = Array.from(techToggleBtn3.children).find((c: any) => c.className?.includes("tech-badge"));
+    expect(badge3).toBeDefined();
+    expect(badge3!.style.display).not.toBe("none");
+    expect(badge3!.textContent).toBe("1");
+    expect(techToggleBtn3.className.includes("has-unlockable")).toBe(true);
+    
+    // Test 4: Some techs unlocked, remaining not affordable - badge should be hidden
+    const world4 = makeWorld();
+    world4.researchPoints = 50; // Not enough for any remaining tech
+    world4.unlockedTechs = ["filter_splitter"]; // 1 unlocked, 7 locked but none affordable
+    handle.update(world4);
+    
+    const techToggleBtn4 = container.children[0]!.children[6]!;
+    const badge4 = Array.from(techToggleBtn4.children).find((c: any) => c.className?.includes("tech-badge"));
+    expect(badge4).toBeDefined();
+    expect(badge4!.style.display).toBe("none");
+    expect(techToggleBtn4.className.includes("has-unlockable")).toBe(false);
+    
     handle.destroy();
   });
 
