@@ -2,7 +2,7 @@
 // Uses only palette colors - no external images
 
 import type { BuildingType, Direction } from "../../sim/types";
-import { getBuildingColor, UI_PALETTE } from "../palette";
+import { getBuildingColor, UI_PALETTE, SHADING_PALETTE } from "../palette";
 
 const W = 32;
 const H = 32;
@@ -28,86 +28,86 @@ function drawMinerBase(ctx: CanvasRenderingContext2D) {
   // Main body 20x20 centered
   fill(ctx, 6, 6, 20, 20, base);
   // Darker border
-  fill(ctx, 7, 7, 18, 18, "rgb(45, 85, 205)");
+  fill(ctx, 7, 7, 18, 18, SHADING_PALETTE.metalDark.css);
   fill(ctx, 8, 8, 16, 16, base);
   // Inner detail
-  fill(ctx, 11, 11, 10, 10, "rgb(80, 120, 240)");
+  fill(ctx, 11, 11, 10, 10, SHADING_PALETTE.metalMid.css);
 }
 
 function drawBeltBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("belt").css;
   // Belt platform 24x8 or 8x24 depending on direction handled in main
   fill(ctx, 4, 12, 24, 8, base);
-  fill(ctx, 5, 13, 22, 6, "rgb(198, 92, 194)");
+  fill(ctx, 5, 13, 22, 6, SHADING_PALETTE.shadow.css);
 }
 
 function drawSplitterBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("splitter").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(235, 79, 51)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Y-split pattern
-  fill(ctx, 15, 8, 2, 16, "rgb(255, 150, 130)");
-  fill(ctx, 8, 15, 16, 2, "rgb(255, 150, 130)");
+  fill(ctx, 15, 8, 2, 16, SHADING_PALETTE.metalLight.css);
+  fill(ctx, 8, 15, 16, 2, SHADING_PALETTE.metalLight.css);
 }
 
 function drawFilterSplitterBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("filter_splitter").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(235, 10, 127)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Filter indicator lines
-  fill(ctx, 10, 10, 12, 2, "rgb(255, 180, 220)");
-  fill(ctx, 10, 14, 12, 2, "rgb(255, 180, 220)");
+  fill(ctx, 10, 10, 12, 2, SHADING_PALETTE.metalLight.css);
+  fill(ctx, 10, 14, 12, 2, SHADING_PALETTE.metalLight.css);
 }
 
 function drawUndergroundBeltBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("underground_belt").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(0, 180, 189)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Tunnel entrance
-  fill(ctx, 10, 10, 12, 12, "rgb(0, 150, 159)");
-  fill(ctx, 12, 12, 8, 8, "rgb(0, 220, 229)");
+  fill(ctx, 10, 10, 12, 12, SHADING_PALETTE.metalDark.css);
+  fill(ctx, 12, 12, 8, 8, SHADING_PALETTE.metalLight.css);
 }
 
 function drawSmelterBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("smelter").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(200, 10, 50)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Furnace opening
-  fill(ctx, 10, 10, 12, 12, "rgb(40, 20, 10)");
+  fill(ctx, 10, 10, 12, 12, SHADING_PALETTE.metalDark.css);
 }
 
 function drawAssemblerBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("assembler").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(30, 185, 30)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Gear symbol center
-  fill(ctx, 13, 13, 6, 6, "rgb(100, 200, 100)");
+  fill(ctx, 13, 13, 6, 6, SHADING_PALETTE.metalLight.css);
 }
 
 function drawRecyclerBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("recycler").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(166, 65, 191)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Recycle arrows hint
-  fill(ctx, 11, 11, 10, 10, "rgb(210, 130, 230)");
+  fill(ctx, 11, 11, 10, 10, SHADING_PALETTE.metalLight.css);
 }
 
 function drawSensorBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("sensor").css;
   fill(ctx, 6, 6, 20, 20, base);
-  fill(ctx, 8, 8, 16, 16, "rgb(0, 235, 235)");
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalMid.css);
   // Lens center
-  fill(ctx, 12, 12, 8, 8, "rgb(100, 255, 255)");
-  fill(ctx, 14, 14, 4, 4, "rgb(200, 255, 255)");
+  fill(ctx, 12, 12, 8, 8, SHADING_PALETTE.metalLight.css);
+  fill(ctx, 14, 14, 4, 4, SHADING_PALETTE.highlight.css);
 }
 
 function drawHubBase(ctx: CanvasRenderingContext2D) {
   const base = getBuildingColor("hub").css;
   fill(ctx, 4, 4, 24, 24, base);
-  fill(ctx, 6, 6, 20, 20, "rgb(235, 50, 20)");
-  fill(ctx, 8, 8, 16, 16, "rgb(255, 120, 80)");
+  fill(ctx, 6, 6, 20, 20, SHADING_PALETTE.metalMid.css);
+  fill(ctx, 8, 8, 16, 16, SHADING_PALETTE.metalLight.css);
   // Central emblem
-  fill(ctx, 12, 12, 8, 8, "rgb(255, 200, 150)");
+  fill(ctx, 12, 12, 8, 8, SHADING_PALETTE.highlight.css);
 }
 
 // ============================================================================
@@ -115,8 +115,8 @@ function drawHubBase(ctx: CanvasRenderingContext2D) {
 // ============================================================================
 
 function drawDirectionIndicator(ctx: CanvasRenderingContext2D, dir: Direction) {
-  const arrowColor = "rgb(255, 255, 255)";
-  const shadowColor = "rgba(0,0,0,0.5)";
+  const arrowColor = SHADING_PALETTE.highlight.css;
+  const shadowColor = SHADING_PALETTE.dropShadow.css;
   
   switch (dir) {
     case "N":
@@ -155,7 +155,7 @@ function drawDirectionIndicator(ctx: CanvasRenderingContext2D, dir: Direction) {
 // ============================================================================
 
 function drawBeltStripes(ctx: CanvasRenderingContext2D, frame: number, dir: Direction) {
-  const stripeColor = "rgba(255,255,255,0.4)";
+  const stripeColor = SHADING_PALETTE.highlight.css;
   const offset = (frame * 4) % 16;
   
   if (dir === "N" || dir === "S") {
@@ -178,7 +178,7 @@ function drawBeltStripes(ctx: CanvasRenderingContext2D, frame: number, dir: Dire
 }
 
 function drawMinerBlade(ctx: CanvasRenderingContext2D, frame: number) {
-  const bladeColor = "rgb(180, 180, 200)";
+  const bladeColor = SHADING_PALETTE.metalLight.css;
   // Rotating blade effect
   if (frame === 0) {
     fill(ctx, 10, 14, 12, 4, bladeColor);
@@ -189,9 +189,9 @@ function drawMinerBlade(ctx: CanvasRenderingContext2D, frame: number) {
 }
 
 function drawSmelterFlame(ctx: CanvasRenderingContext2D, frame: number) {
-  const flame1 = "rgb(255, 100, 0)";
-  const flame2 = "rgb(255, 200, 50)";
-  const flame3 = "rgb(255, 255, 100)";
+  const flame1 = SHADING_PALETTE.alertRed.css;
+  const flame2 = SHADING_PALETTE.alertAmber.css;
+  const flame3 = SHADING_PALETTE.statusGreen.css;
   
   // Flickering flame in furnace opening
   if (frame === 0) {
@@ -233,11 +233,11 @@ export function drawBelt(ctx: CanvasRenderingContext2D, dir: Direction, frame: n
   if (dir === "N" || dir === "S") {
     // Vertical belt
     fill(ctx, 12, 4, 8, 24, getBuildingColor("belt").css);
-    fill(ctx, 13, 5, 6, 22, "rgb(198, 92, 194)");
+    fill(ctx, 13, 5, 6, 22, SHADING_PALETTE.shadow.css);
   } else {
     // Horizontal belt
     fill(ctx, 4, 12, 24, 8, getBuildingColor("belt").css);
-    fill(ctx, 5, 13, 22, 6, "rgb(198, 92, 194)");
+    fill(ctx, 5, 13, 22, 6, SHADING_PALETTE.shadow.css);
   }
   drawDirectionIndicator(ctx, dir);
   drawBeltStripes(ctx, frame, dir);
@@ -260,7 +260,7 @@ export function drawUndergroundBelt(ctx: CanvasRenderingContext2D, dir: Directio
   drawUndergroundBeltBase(ctx);
   drawDirectionIndicator(ctx, dir);
   // Scroll indicator for underground
-  const scrollColor = "rgba(255,255,255,0.3)";
+  const scrollColor = SHADING_PALETTE.highlight.css;
   const offset = (frame * 3) % 8;
   fill(ctx, 14, 14 + offset, 4, 2, scrollColor);
   if (faulted) drawFaultBadge(ctx);
@@ -278,7 +278,7 @@ export function drawAssembler(ctx: CanvasRenderingContext2D, dir: Direction, fra
   drawDirectionIndicator(ctx, dir);
   // Slight pulsing effect
   if (frame > 0) {
-    fill(ctx, 12, 12, 8, 8, "rgb(120, 220, 120)");
+    fill(ctx, 12, 12, 8, 8, SHADING_PALETTE.metalLight.css);
   }
   if (faulted) drawFaultBadge(ctx);
 }
@@ -288,9 +288,9 @@ export function drawRecycler(ctx: CanvasRenderingContext2D, dir: Direction, fram
   drawDirectionIndicator(ctx, dir);
   // Rotating recycle hint
   if (frame === 0) {
-    fill(ctx, 10, 12, 12, 2, "rgb(210, 130, 230)");
+    fill(ctx, 10, 12, 12, 2, SHADING_PALETTE.metalLight.css);
   } else {
-    fill(ctx, 12, 10, 2, 12, "rgb(210, 130, 230)");
+    fill(ctx, 12, 10, 2, 12, SHADING_PALETTE.metalLight.css);
   }
   if (faulted) drawFaultBadge(ctx);
 }
@@ -299,7 +299,7 @@ export function drawSensor(ctx: CanvasRenderingContext2D, dir: Direction, frame:
   drawSensorBase(ctx);
   drawDirectionIndicator(ctx, dir);
   // Scanning beam in direction
-  const beamColor = "rgba(200, 255, 255, 0.6)";
+  const beamColor = SHADING_PALETTE.highlight.css;
   if (dir === "N") fill(ctx, 14, 0, 4, 6, beamColor);
   else if (dir === "E") fill(ctx, 26, 14, 6, 4, beamColor);
   else if (dir === "S") fill(ctx, 14, 26, 4, 6, beamColor);
@@ -311,7 +311,7 @@ export function drawHub(ctx: CanvasRenderingContext2D, dir: Direction, frame: nu
   drawHubBase(ctx);
   drawDirectionIndicator(ctx, dir);
   // Crown/top detail
-  fill(ctx, 10, 2, 12, 4, "rgb(255, 220, 180)");
+  fill(ctx, 10, 2, 12, 4, SHADING_PALETTE.metalLight.css);
   if (faulted) drawFaultBadge(ctx);
 }
 
