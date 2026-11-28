@@ -68,7 +68,7 @@ describe("mountHud", () => {
     const handle = mountHud(container as unknown as HTMLElement);
     const world = makeWorld();
     world.tick = 500;
-    world.deliveryHistory = [{ tick: 450, material: "iron_plate", amount: 20 }];
+    world.deliveryHistory = [{ tick: 450, material: "circuit_board", amount: 20 }];
     handle.update(world);
     expect(container.children[0]!.children[0]!.textContent).toBe("生産速度/分：20");
     expect(container.children[0]!.children[1]!.textContent).toBe("ティック：500");
@@ -113,10 +113,10 @@ describe("mountHud", () => {
   it("should update DOM non-destructively", () => {
     const handle = mountHud(container as unknown as HTMLElement);
     const spmEl = container.children[0]!.children[0]!;
-    const w1 = makeWorld(); w1.deliveryHistory = [{ tick: 50, material: "iron_plate", amount: 10 }];
+    const w1 = makeWorld(); w1.deliveryHistory = [{ tick: 50, material: "circuit_board", amount: 10 }];
     handle.update(w1);
     const first = spmEl.textContent;
-    const w2 = makeWorld(); w2.tick = 999; w2.deliveryHistory = [{ tick: 950, material: "copper_plate", amount: 20 }];
+    const w2 = makeWorld(); w2.tick = 999; w2.deliveryHistory = [{ tick: 950, material: "microchip", amount: 20 }];
     handle.update(w2);
     expect(spmEl.textContent).not.toBe(first);
     expect(spmEl.textContent).toBe("生産速度/分：20");
@@ -383,6 +383,7 @@ describe("mountHud", () => {
     const world = makeWorld();
     world.tick = 1000;
     // Note: Quest templates use targets like iron_plate: 15, copper_plate: 15
+    // QUEST_DURATION_TICKS = 36,000 (10 minutes × 3,600 ticks/minute)
     world.activeQuests = [
       {
         questId: "quest_0",
@@ -396,6 +397,57 @@ describe("mountHud", () => {
     
     const questsEl = container.children[0]!.children[8]!;
     expect(questsEl.textContent).toContain("鉄板 5/15");
+    // At tick 1000, startedAtTick 500, elapsed = 500 ticks
+    // remainingTicks = 36000 - 500 = 35500
+    // remainingMinutes = Math.ceil(35500 / 3600) = Math.ceil(9.86...) = 10
+    expect(questsEl.textContent).toContain("残り10分");
+    
+    handle.destroy();
+  });
+
+  it("should display quest remaining time decreasing accurately as ticks advance", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    
+    // Quest starts at tick 0
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 0 },
+        startedAtTick: 0,
+        templateIndex: 0,
+      } as ActiveQuestState,
+    ];
+    
+    // Shortly after start (tick 100), should show ~10 minutes remaining
+    world.tick = 100;
+    handle.update(world);
+    const questsEl = container.children[0]!.children[8]!;
+    // remainingTicks = 36000 - 100 = 35900
+    // remainingMinutes = Math.ceil(35900 / 3600) = Math.ceil(9.97...) = 10
+    expect(questsEl.textContent).toContain("残り10分");
+    
+    // After 18,000 ticks (halfway), should show ~5 minutes remaining
+    world.tick = 18000;
+    handle.update(world);
+    // remainingTicks = 36000 - 18000 = 18000
+    // remainingMinutes = Math.ceil(18000 / 3600) = Math.ceil(5) = 5
+    expect(questsEl.textContent).toContain("残り5分");
+    
+    // After 35,000 ticks (near end), should show 1 minute remaining
+    world.tick = 35000;
+    handle.update(world);
+    // remainingTicks = 36000 - 35000 = 1000
+    // remainingMinutes = Math.ceil(1000 / 3600) = Math.ceil(0.28...) = 1
+    expect(questsEl.textContent).toContain("残り1分");
+    
+    // After quest expires (tick >= 36000), should show 0 minutes
+    world.tick = 36000;
+    handle.update(world);
+    // remainingTicks = Math.max(0, 36000 - 36000) = 0
+    // remainingMinutes = Math.ceil(0 / 3600) = 0
+    expect(questsEl.textContent).toContain("残り0分");
     
     handle.destroy();
   });
