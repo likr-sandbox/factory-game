@@ -17,9 +17,10 @@ import { createInspector, type InspectorHandle } from "./ui/inspector";
 import { registerFactoryWebMcpTools } from "./webmcp/bridge";
 import { mountWebMcpPanel } from "./ui/webmcpPanel";
 import type { ModelContextLike, WebMcpHandle } from "./webmcp/types";
+import { TICKS_PER_SECOND } from "./sim/constants";
 
 // Base tick interval in milliseconds (60 FPS target)
-export const BASE_TICK_INTERVAL_MS = 1000 / 60;
+export const BASE_TICK_INTERVAL_MS = 1000 / TICKS_PER_SECOND;
 
 // Simulation speed multiplier (default 1x)
 let simulationSpeed: number = 1;

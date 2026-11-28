@@ -7,6 +7,8 @@ import { HUB_ORIGIN } from "./world";
 import { collectSensorAlerts } from "./reliability";
 import { isRecipeUnlocked, getTechTreeStatus, getTutorialProgress } from "./progression";
 import { getActiveQuests } from "./quests";
+import { TICKS_PER_MINUTE } from "./constants";
+import { calculateSpm } from "./stats";
 
 // ============================================================================
 // Query Function Results
@@ -97,7 +99,6 @@ export interface Metrics {
 // ============================================================================
 
 const MAX_REGION_DIM = 24;
-const TICKS_PER_MINUTE = 600;
 
 /**
  * Get factory summary statistics
@@ -113,10 +114,9 @@ export function getFactorySummary(world: WorldState): FactorySummary {
       return tile?.deposit?.remaining === undefined || tile.deposit.remaining <= 0;
     }).length;
 
-  // Calculate SPM from delivery history
-  const recentHistory = world.deliveryHistory.filter(h => h.tick >= world.tick - TICKS_PER_MINUTE);
-  const totalDelivered = recentHistory.reduce((sum, h) => sum + (h.amount || 0), 0);
-  const spm = totalDelivered;
+  // Calculate SPM from delivery history using pure calculateSpm function
+  const summary = calculateSpm(world.deliveryHistory, world.tick);
+  const spm = summary.totalSpm;
 
   return {
     width: world.width,
@@ -301,23 +301,10 @@ export function getMetrics(
 ): Metrics {
   const { windowTicks = TICKS_PER_MINUTE } = params || {};
 
-  // Calculate SPM from delivery history within window
-  const cutoffTick = world.tick - windowTicks;
-  const recentHistory = world.deliveryHistory.filter(h => h.tick >= cutoffTick);
-
-  // Per-material delivery rates
-  const deliveriesByMaterial: Partial<Record<MaterialId, number>> = {};
-  for (const entry of recentHistory) {
-    deliveriesByMaterial[entry.material] = (deliveriesByMaterial[entry.material] || 0) + entry.amount;
-  }
-
-  // Normalize to per-minute (if window is not exactly one minute)
-  const scale = TICKS_PER_MINUTE / windowTicks;
-  for (const mat of Object.keys(deliveriesByMaterial)) {
-    deliveriesByMaterial[mat as MaterialId] = Math.round((deliveriesByMaterial[mat as MaterialId] || 0) * scale);
-  }
-
-  const spm = recentHistory.reduce((sum, h) => sum + (h.amount || 0), 0);
+  // Calculate SPM using pure calculateSpm function with proper normalization
+  const summary = calculateSpm(world.deliveryHistory, world.tick, windowTicks);
+  const deliveriesByMaterial = summary.perMaterial;
+  const spm = summary.totalSpm;
 
   // Find bottleneck candidates
   const bottlenecks: BottleneckCandidate[] = [];

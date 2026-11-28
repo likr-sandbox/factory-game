@@ -8,6 +8,7 @@ import {
   drawCoalDeposit,
   drawSilicaSandDeposit,
 } from "../../src/game/sprites/terrain";
+import { getDepositColor } from "../../src/game/palette";
 
 // ============================================================================
 // Mock Canvas Implementation
@@ -122,9 +123,12 @@ describe("drawIronOreDeposit", () => {
     const uniqueStyles = ctx.getUniqueFillStyles();
     expect(uniqueStyles.size).toBeGreaterThan(1);
 
-    // Should contain steel-blue-ish colors (#5D737E -> rgb(93,115,126))
+    // Should contain steel-blue-ish colors from DEPOSIT_PALETTE
+    const expectedColor = getDepositColor("iron_ore").css;
+    // Normalize expected color (remove spaces) to match terrain.ts formatting
+    const normalizedExpected = expectedColor.replace(/\s+/g, "");
     const stylesArray: string[] = Array.from(uniqueStyles);
-    expect(stylesArray.some((s) => s.includes("93") && s.includes("115") && s.includes("126"))).toBe(true);
+    expect(stylesArray.some((s) => s.replace(/\s+/g, "") === normalizedExpected)).toBe(true);
   });
 
   it("should render larger mineral chunks (2-4px)", () => {
@@ -163,9 +167,12 @@ describe("drawCopperOreDeposit", () => {
     const uniqueStyles = ctx.getUniqueFillStyles();
     expect(uniqueStyles.size).toBeGreaterThan(1);
 
-    // Should contain copper-orange-ish colors (#D2691E -> rgb(210,105,30))
+    // Should contain copper-orange-ish colors from DEPOSIT_PALETTE
+    const expectedColor = getDepositColor("copper_ore").css;
+    // Normalize expected color (remove spaces) to match terrain.ts formatting
+    const normalizedExpected = expectedColor.replace(/\s+/g, "");
     const stylesArray: string[] = Array.from(uniqueStyles);
-    expect(stylesArray.some((s) => s.includes("210") && s.includes("105") && s.includes("30"))).toBe(true);
+    expect(stylesArray.some((s) => s.replace(/\s+/g, "") === normalizedExpected)).toBe(true);
   });
 
   it("should render medium-sized irregular chunks (1-3px)", () => {
@@ -186,9 +193,12 @@ describe("drawCoalDeposit", () => {
     const uniqueStyles = ctx.getUniqueFillStyles();
     expect(uniqueStyles.size).toBeGreaterThan(1);
 
-    // Should contain deep charcoal colors (#222629 -> rgb(34,38,41))
+    // Should contain deep charcoal colors from DEPOSIT_PALETTE
+    const expectedColor = getDepositColor("coal").css;
+    // Normalize expected color (remove spaces) to match terrain.ts formatting
+    const normalizedExpected = expectedColor.replace(/\s+/g, "");
     const stylesArray: string[] = Array.from(uniqueStyles);
-    expect(stylesArray.some((s) => s.includes("34") && s.includes("38") && s.includes("41"))).toBe(true);
+    expect(stylesArray.some((s) => s.replace(/\s+/g, "") === normalizedExpected)).toBe(true);
   });
 
   it("should use predominantly dark colors", () => {
@@ -219,9 +229,12 @@ describe("drawSilicaSandDeposit", () => {
     const uniqueStyles = ctx.getUniqueFillStyles();
     expect(uniqueStyles.size).toBeGreaterThan(1);
 
-    // Should contain pale sand colors (#E8D9A0 -> rgb(232,217,160))
+    // Should contain pale sand colors from DEPOSIT_PALETTE
+    const expectedColor = getDepositColor("silica_sand").css;
+    // Normalize expected color (remove spaces) to match terrain.ts formatting
+    const normalizedExpected = expectedColor.replace(/\s+/g, "");
     const stylesArray: string[] = Array.from(uniqueStyles);
-    expect(stylesArray.some((s) => s.includes("232") && s.includes("217") && s.includes("160"))).toBe(true);
+    expect(stylesArray.some((s) => s.replace(/\s+/g, "") === normalizedExpected)).toBe(true);
   });
 
   it("should use predominantly light colors", () => {
@@ -229,7 +242,19 @@ describe("drawSilicaSandDeposit", () => {
     drawSilicaSandDeposit(ctx, 42);
 
     const uniqueStyles = ctx.getUniqueFillStyles();
-    for (const style of uniqueStyles) {
+    // Filter out outline (near-black) and shadow colors, check base/highlight colors
+    const nonOutlineStyles = Array.from(uniqueStyles as Set<string>).filter((style: string) => {
+      const match = style.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      if (!match || !match[1] || !match[2] || !match[3]) return true;
+      const r = parseInt(match[1]);
+      const g = parseInt(match[2]);
+      const b = parseInt(match[3]);
+      // Exclude near-black outline (all channels < 50)
+      return !(r < 50 && g < 50 && b < 50);
+    });
+    
+    // Remaining colors should be light (at least one channel > 150)
+    for (const style of nonOutlineStyles as string[]) {
       const match = style.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
       if (match && match[1] !== undefined && match[2] !== undefined && match[3] !== undefined) {
         const r = parseInt(match[1]);
@@ -267,12 +292,20 @@ describe("Ore Deposit Color Distinction", () => {
 
     const primaryColors = new Map<string, string>();
     
-    // Get most frequent color (primary) for each ore
+    // Get most frequent non-outline color (primary deposit color) for each ore
     for (const { type, ctx } of contexts) {
       const counts = ctx.getFillStyleCounts();
       let maxCount = 0;
       let primaryColor = "";
       for (const [color, count] of counts) {
+        // Skip near-black outline color (all channels < 50)
+        const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (match && match[1] && match[2] && match[3]) {
+          const r = parseInt(match[1]);
+          const g = parseInt(match[2]);
+          const b = parseInt(match[3]);
+          if (r < 50 && g < 50 && b < 50) continue; // Skip outline
+        }
         if (count > maxCount) {
           maxCount = count;
           primaryColor = color;

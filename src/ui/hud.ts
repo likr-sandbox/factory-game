@@ -4,10 +4,9 @@
 import type { WorldState, MaterialId } from "../sim/types";
 import { getFactorySummary } from "../sim/query";
 import { getTutorialProgress, getTechTreeStatus, getMissingPrerequisites, type TechId } from "../sim/progression";
-import { getActiveQuests, getQuestProgress } from "../sim/quests";
+import { QUEST_DURATION_TICKS, getActiveQuests, getQuestProgress } from "../sim/quests";
 import { MATERIAL_CATALOG, TECH_CATALOG } from "../sim/catalog";
-
-const QUEST_DURATION_TICKS = 6000;
+import { TICKS_PER_MINUTE } from "../sim/constants";
 
 export interface HudOptions {
   onSpeedChange?: (speed: number) => void;
@@ -382,8 +381,8 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
             const matName = matEntry ? matEntry.nameJa : material;
             parts.push(`${matName} ${prog.current}/${prog.target}`);
           }
-          const remainingTicks = QUEST_DURATION_TICKS - (world.tick - quest.startedAtTick);
-          questLabels.push(`[${parts.join(", ")} 残り${Math.floor(remainingTicks / 600)}分]`);
+          const remainingTicks = Math.max(0, QUEST_DURATION_TICKS - (world.tick - quest.startedAtTick));
+          questLabels.push(`[${parts.join(", ")} 残り${Math.ceil(remainingTicks / TICKS_PER_MINUTE)}分]`);
         }
         questsEl.textContent = `クエスト：${questLabels.join(", ")}`;
       }
