@@ -5,6 +5,8 @@ import type { WorldState, ActiveQuestState, MaterialId, RecipeId } from "./types
 import { nextRandom } from "./world";
 import { RECIPE_CATALOG } from "./catalog";
 import { isRecipeUnlocked } from "./progression";
+import { QUEST_DURATION_TICKS } from "./constants";
+export { QUEST_DURATION_TICKS };
 
 // Quest templates covering required recipes: iron_plate, copper_plate, iron_gear, copper_wire, circuit_board, microchip, automation_module
 interface QuestTemplate {
@@ -24,7 +26,6 @@ const QUEST_TEMPLATES: QuestTemplate[] = [
   { id: "delivery_automation_module", nameJa: "自動化モジュール納品ミッション", deliver: { automation_module: 2 }, rewardPoints: 250 },
 ];
 
-const QUEST_DURATION_TICKS = 6000;
 export const MAX_ACTIVE_QUESTS = 3;
 
 interface ExtendedActiveQuestState extends ActiveQuestState {
