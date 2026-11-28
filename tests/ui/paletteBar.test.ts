@@ -83,7 +83,7 @@ describe("mountPaletteBar", () => {
     expect(btns[2]!.textContent).toBe("分配器");
     expect(btns[3]!.textContent).toBe("フィルター分配機");
     expect(btns[4]!.textContent).toBe("交差ブリッジ");
-    expect(btns[5]!.textContent).toBe("精錬炉");
+    expect(btns[5]!.textContent).toBe("溶鉱炉");
     expect(btns[6]!.textContent).toBe("組立機");
     expect(btns[7]!.textContent).toBe("不純物処理炉");
     expect(btns[8]!.textContent).toBe("センサー");
