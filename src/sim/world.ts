@@ -4,6 +4,7 @@ export const WORLD_SIZE = 64;
 export const HUB_ORIGIN = { x: 31, y: 31 };
 
 import type { WorldState, Tile, ResourceDeposit, BuildingState, Direction } from "./types";
+import { generateTieredResources } from "./worldResources";
 
 export function nextRandom(state: number): { value: number; nextState: number } {
   let t = (state += 0x6d2b79f5);
@@ -55,7 +56,6 @@ export function isHubTile(world: WorldState, x: number, y: number): boolean {
 }
 
 const HUB_SAFE_RADIUS = 4;
-const RESOURCE_TYPES: ("iron_ore" | "copper_ore" | "coal" | "silica_sand")[] = ["iron_ore", "copper_ore", "coal", "silica_sand"];
 
 function isInHubSafeZone(x: number, y: number): boolean {
   const dx = Math.abs(x - HUB_ORIGIN.x - 0.5);
@@ -64,43 +64,6 @@ function isInHubSafeZone(x: number, y: number): boolean {
 }
 
 type Pos = { x: number; y: number };
-
-function placeCluster(
-  tiles: Tile[][],
-  rng: () => number,
-  centerX: number,
-  centerY: number,
-  clusterSize: number,
-  deposit: ResourceDeposit
-): void {
-  const placed = new Set<string>();
-  const positions: Pos[] = [{ x: centerX, y: centerY }];
-  placed.add(`${centerX},${centerY}`);
-
-  for (let i = 0; i < clusterSize; i++) {
-    if (positions.length === 0) break;
-    const idx = Math.floor(rng() * positions.length);
-    const pos = positions.splice(idx, 1)[0]!;
-
-    const neighbors: Pos[] = [];
-    if (pos.x + 1 < WORLD_SIZE) neighbors.push({ x: pos.x + 1, y: pos.y });
-    if (pos.x - 1 >= 0) neighbors.push({ x: pos.x - 1, y: pos.y });
-    if (pos.y + 1 < WORLD_SIZE) neighbors.push({ x: pos.x, y: pos.y + 1 });
-    if (pos.y - 1 >= 0) neighbors.push({ x: pos.x, y: pos.y - 1 });
-
-    for (const n of neighbors) {
-      if (placed.has(`${n.x},${n.y}`)) continue;
-      if (isInHubSafeZone(n.x, n.y)) continue;
-      const tile = tiles[n.y]![n.x]!;
-      if (tile.terrain !== "grass") continue;
-
-      tile.deposit = { ...deposit };
-      placed.add(`${n.x},${n.y}`);
-      positions.push(n);
-      if (placed.size >= clusterSize) break;
-    }
-  }
-}
 
 function generateTerrain(tiles: Tile[][], rng: () => number): void {
   for (let y = 0; y < WORLD_SIZE; y++) {
@@ -189,89 +152,6 @@ function generateTerrain(tiles: Tile[][], rng: () => number): void {
   }
 }
 
-function placeResourceDeposits(tiles: Tile[][], rng: () => number): void {
-  const usedPositions = new Set<string>();
-
-  for (const material of RESOURCE_TYPES) {
-    const numClusters = 3 + Math.floor(rng() * 3);
-    const attemptsPerCluster = 50;
-
-    for (let c = 0; c < numClusters; c++) {
-      let placed = false;
-      for (let attempt = 0; attempt < attemptsPerCluster && !placed; attempt++) {
-        const cx = Math.floor(rng() * WORLD_SIZE);
-        const cy = Math.floor(rng() * WORLD_SIZE);
-
-        if (isInHubSafeZone(cx, cy)) continue;
-        const tile = tiles[cy]![cx]!;
-        if (tile.terrain !== "grass") continue;
-        if (usedPositions.has(`${cx},${cy}`)) continue;
-
-        const amount = 500 + Math.floor(rng() * 2000);
-        const deposit: ResourceDeposit = {
-          material,
-          remaining: amount,
-          initialAmount: amount,
-        };
-
-        const clusterSize = 3 + Math.floor(rng() * 5);
-        placeCluster(tiles, rng, cx, cy, clusterSize, deposit);
-
-        for (let y = Math.max(0, cy - 2); y <= Math.min(WORLD_SIZE - 1, cy + 2); y++) {
-          for (let x = Math.max(0, cx - 2); x <= Math.min(WORLD_SIZE - 1, cx + 2); x++) {
-            const t = tiles[y]![x]!;
-            if (t.deposit?.material === material) {
-              usedPositions.add(`${x},${y}`);
-            }
-          }
-        }
-        placed = true;
-      }
-    }
-  }
-}
-
-function ensureReachableResources(tiles: Tile[][], rng: () => number): void {
-  const maxDistance = 20;
-  for (const material of RESOURCE_TYPES) {
-    let hasReachable = false;
-    for (let y = HUB_ORIGIN.y - maxDistance; y <= HUB_ORIGIN.y + maxDistance && !hasReachable; y++) {
-      for (let x = HUB_ORIGIN.x - maxDistance; x <= HUB_ORIGIN.x + maxDistance && !hasReachable; x++) {
-        if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_SIZE) continue;
-        const tile = tiles[y]![x]!;
-        if (tile.deposit?.material === material) {
-          hasReachable = true;
-        }
-      }
-    }
-
-    if (!hasReachable) {
-      const attempts = 100;
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        const angle = rng() * Math.PI * 2;
-        const dist = 8 + rng() * 12;
-        const cx = Math.round(HUB_ORIGIN.x + Math.cos(angle) * dist);
-        const cy = Math.round(HUB_ORIGIN.y + Math.sin(angle) * dist);
-
-        if (cx < 0 || cx >= WORLD_SIZE || cy < 0 || cy >= WORLD_SIZE) continue;
-        if (isInHubSafeZone(cx, cy)) continue;
-        const tile = tiles[cy]![cx]!;
-        if (tile.terrain !== "grass") continue;
-
-        const amount = 800 + Math.floor(rng() * 1500);
-        const deposit: ResourceDeposit = {
-          material,
-          remaining: amount,
-          initialAmount: amount,
-        };
-        const clusterSize = 3 + Math.floor(rng() * 4);
-        placeCluster(tiles, rng, cx, cy, clusterSize, deposit);
-        break;
-      }
-    }
-  }
-}
-
 function createHubBuilding(tiles: Tile[][]): BuildingState {
   const hub: BuildingState = {
     id: "hub",
@@ -317,8 +197,31 @@ export function createWorld(seed: number = 12345): WorldState {
   }
 
   generateTerrain(tiles, rng);
-  placeResourceDeposits(tiles, rng);
-  ensureReachableResources(tiles, rng);
+  
+  // Create partial world state for resource generation
+  const partialWorld: WorldState = {
+    seed,
+    width: WORLD_SIZE,
+    height: WORLD_SIZE,
+    tick: 0,
+    rngState: seed,
+    tiles,
+    buildings: {},
+    nextBuildingId: 1,
+    hubOrigin: HUB_ORIGIN,
+    delivered: {},
+    deliveryHistory: [],
+    unlockedTechs: [],
+    completedQuests: [],
+    researchPoints: 0,
+    tutorialPhase: 1,
+    completedTutorialSteps: [],
+    activeQuests: [],
+    nextQuestId: 0,
+    spm: {},
+  };
+  
+  generateTieredResources(partialWorld, rng);
   const hubBuilding = createHubBuilding(tiles);
 
   const buildings: Record<string, BuildingState> = { hub: hubBuilding };

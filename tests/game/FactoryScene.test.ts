@@ -5,6 +5,49 @@ import { FactoryScene } from "../../src/game/FactoryScene";
 import { PlacementGhost } from "../../src/game/overlays";
 import { Scene } from "phaser";
 
+// Mock document.createElement for offscreen canvas usage
+vi.stubGlobal("document", {
+  createElement: vi.fn().mockReturnValue({
+    width: 32,
+    height: 32,
+    getContext: vi.fn().mockReturnValue({
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 1,
+      font: "",
+      fillRect: vi.fn(),
+      fillCircle: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      stroke: vi.fn(),
+      fill: vi.fn(),
+      arc: vi.fn(),
+      rect: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      bezierCurveTo: vi.fn(),
+      ellipse: vi.fn(),
+      strokeRect: vi.fn(),
+      fillText: vi.fn(),
+      clearRect: vi.fn(),
+      measureText: vi.fn().mockReturnValue({ width: 0 }),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      scale: vi.fn(),
+      setTransform: vi.fn(),
+      transform: vi.fn(),
+      clip: vi.fn(),
+      drawImage: vi.fn(),
+      getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(4 * 32 * 32) }),
+      putImageData: vi.fn(),
+      canvas: { width: 32, height: 32 },
+    }),
+  }),
+});
+
 // Mock Phaser GameObjects
 const mockGraphics = {
   x: 0,
@@ -18,6 +61,8 @@ const mockGraphics = {
   moveTo: vi.fn(),
   lineTo: vi.fn(),
   strokePath: vi.fn(),
+  clear: vi.fn(),
+  setVisible: vi.fn(),
   destroy: vi.fn(),
 };
 
@@ -53,31 +98,49 @@ vi.mock("phaser", () => {
       },
     };
     textures = {
-      createCanvas: vi.fn().mockReturnValue({
-        getContext: vi.fn().mockReturnValue({
-          fillStyle: "",
-          strokeStyle: "",
-          lineWidth: 1,
-          font: "",
-          fillRect: vi.fn(),
-          fillCircle: vi.fn(),
-          beginPath: vi.fn(),
-          moveTo: vi.fn(),
-          lineTo: vi.fn(),
-          closePath: vi.fn(),
-          stroke: vi.fn(),
-          fill: vi.fn(),
-          arc: vi.fn(),
-          rect: vi.fn(),
-          quadraticCurveTo: vi.fn(),
-          bezierCurveTo: vi.fn(),
-          ellipse: vi.fn(),
-          strokeRect: vi.fn(),
-          fillText: vi.fn(),
-          clearRect: vi.fn(),
-          measureText: vi.fn().mockReturnValue({ width: 0 }),
-        }),
-        refresh: vi.fn(),
+      createCanvas: vi.fn().mockImplementation(function(key: string, width: number, height: number) {
+        // Return a canvas mock where context.canvas references back to this object
+        const canvasMock = {
+          width,
+          height,
+          getContext: () => ({
+            fillStyle: "",
+            strokeStyle: "",
+            lineWidth: 1,
+            font: "",
+            fillRect: vi.fn(),
+            fillCircle: vi.fn(),
+            beginPath: vi.fn(),
+            moveTo: vi.fn(),
+            lineTo: vi.fn(),
+            closePath: vi.fn(),
+            stroke: vi.fn(),
+            fill: vi.fn(),
+            arc: vi.fn(),
+            rect: vi.fn(),
+            quadraticCurveTo: vi.fn(),
+            bezierCurveTo: vi.fn(),
+            ellipse: vi.fn(),
+            strokeRect: vi.fn(),
+            fillText: vi.fn(),
+            clearRect: vi.fn(),
+            measureText: vi.fn().mockReturnValue({ width: 0 }),
+            save: vi.fn(),
+            restore: vi.fn(),
+            translate: vi.fn(),
+            rotate: vi.fn(),
+            scale: vi.fn(),
+            setTransform: vi.fn(),
+            transform: vi.fn(),
+            clip: vi.fn(),
+            drawImage: vi.fn(),
+            getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(4 * 32 * 32) }),
+            putImageData: vi.fn(),
+            canvas: { width, height },
+          }),
+          refresh: vi.fn(),
+        };
+        return canvasMock;
       }),
     };
     add = {
@@ -335,7 +398,7 @@ describe("FactoryScene", () => {
       expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(1024, 1024);
     });
 
-    it("should render hub sprite centered at (32 * 32, 32 * 32) with display size 64x64", () => {
+    it("should render hub sprite centered at (32 * 32, 32 * 32) with native 64×64 texture", () => {
       const world = createMockWorld({
         hubOrigin: { x: 31, y: 31 },
         buildings: {
@@ -371,8 +434,8 @@ describe("FactoryScene", () => {
       expect(hubCall![0]).toBe(1024);
       expect(hubCall![1]).toBe(1024);
 
-      // setDisplaySize should be called with (64, 64) for hub
-      expect(mockSprite.setDisplaySize).toHaveBeenCalledWith(64, 64);
+      // setDisplaySize should NOT be called - hub uses native 64×64 texture
+      expect(mockSprite.setDisplaySize).not.toHaveBeenCalled();
     });
   });
 
@@ -449,8 +512,187 @@ describe("FactoryScene", () => {
         wheelHandler!(null as unknown, null as unknown, 0, -100);
       }
       
-      // Should be clamped at ZOOM_MAX (2)
-      expect(scene.cameras.main.zoom).toBe(2);
+      // Should be clamped at ZOOM_MAX (2.5)
+      expect(scene.cameras.main.zoom).toBe(2.5);
+    });
+  });
+
+  describe("camera pan (1:1 natural follow)", () => {
+    let pointerMoveHandler: ((pointer: unknown) => void) | null = null;
+
+    it("should move camera by -dx / zoom, -dy / zoom for 1:1 natural follow", () => {
+      scene.create();
+      
+      // Capture the pointermove handler after create()
+      (scene.input.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "pointermove" && typeof call[1] === "function") {
+          pointerMoveHandler = call[1] as typeof pointerMoveHandler;
+        }
+      });
+      
+      expect(pointerMoveHandler).toBeDefined();
+      
+      // Set up camera pan start state
+      (scene as any).cameraPanStart = { x: 100, y: 100 };
+      (scene as any).lastMousePos = { x: 100, y: 100 };
+      scene.cameras.main.scrollX = 0;
+      scene.cameras.main.scrollY = 0;
+      scene.cameras.main.zoom = 1;
+
+      // Simulate pointer move with dx=50, dy=30
+      const mockPointer = { x: 150, y: 130 };
+      pointerMoveHandler!(mockPointer);
+      
+      // scrollX should be -50/1 = -50, scrollY should be -30/1 = -30
+      expect(scene.cameras.main.scrollX).toBe(-50);
+      expect(scene.cameras.main.scrollY).toBe(-30);
+    });
+
+    it("should account for zoom level in pan calculation", () => {
+      scene.create();
+      
+      // Capture the pointermove handler after create()
+      (scene.input.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "pointermove" && typeof call[1] === "function") {
+          pointerMoveHandler = call[1] as typeof pointerMoveHandler;
+        }
+      });
+      
+      expect(pointerMoveHandler).toBeDefined();
+      
+      // Set up camera pan start state with zoom = 2
+      (scene as any).cameraPanStart = { x: 100, y: 100 };
+      (scene as any).lastMousePos = { x: 100, y: 100 };
+      scene.cameras.main.scrollX = 0;
+      scene.cameras.main.scrollY = 0;
+      scene.cameras.main.zoom = 2;
+
+      // Simulate pointer move with dx=50, dy=30
+      const mockPointer = { x: 150, y: 130 };
+      pointerMoveHandler!(mockPointer);
+      
+      // scrollX should be -50/2 = -25, scrollY should be -30/2 = -15
+      expect(scene.cameras.main.scrollX).toBe(-25);
+      expect(scene.cameras.main.scrollY).toBe(-15);
+    });
+  });
+
+  describe("centerCameraOnTile", () => {
+    it("should call camera.centerOn with tile center position", () => {
+      scene.setContext(createMockWorld(), {
+        mode: "place",
+        selectedBuilding: null,
+        direction: "N",
+        selectedRecipe: null,
+        selectedFilter: null,
+        inspectedCoord: null,
+        isDraggingBelt: false,
+        dragStartX: null,
+        dragStartY: null,
+      });
+
+      scene.centerCameraOnTile(10, 20);
+
+      // Should call centerOn with (10 * 32 + 16, 20 * 32 + 16) = (336, 656)
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(336, 656);
+    });
+
+    it("should handle different tile coordinates", () => {
+      scene.setContext(createMockWorld(), {
+        mode: "place",
+        selectedBuilding: null,
+        direction: "N",
+        selectedRecipe: null,
+        selectedFilter: null,
+        inspectedCoord: null,
+        isDraggingBelt: false,
+        dragStartX: null,
+        dragStartY: null,
+      });
+
+      scene.centerCameraOnTile(0, 0);
+
+      // Should call centerOn with (0 * 32 + 16, 0 * 32 + 16) = (16, 16)
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(16, 16);
+    });
+  });
+
+  describe("getCameraViewport", () => {
+    it("should return correct viewport bounds", () => {
+      scene.create();
+      
+      // Set camera position and size
+      scene.cameras.main.scrollX = 320; // 10 tiles * 32
+      scene.cameras.main.scrollY = 640; // 20 tiles * 32
+      scene.cameras.main.width = 960;   // 30 tiles * 32
+      scene.cameras.main.height = 544;  // 17 tiles * 32
+
+      const viewport = scene.getCameraViewport();
+      
+      expect(viewport.left).toBe(10);
+      expect(viewport.top).toBe(20);
+      expect(viewport.right).toBe(40); // 10 + 30
+      expect(viewport.bottom).toBe(37); // 20 + 17
+      expect(viewport.width).toBe(30);
+      expect(viewport.height).toBe(17);
+    });
+
+    it("should return zeros when camera is not initialized", () => {
+      // Don't call create(), so camera is not set up
+      const viewport = scene.getCameraViewport();
+      
+      expect(viewport.left).toBe(0);
+      expect(viewport.right).toBe(0);
+      expect(viewport.top).toBe(0);
+      expect(viewport.bottom).toBe(0);
+      expect(viewport.width).toBe(0);
+      expect(viewport.height).toBe(0);
+    });
+  });
+
+  describe("H key shortcut", () => {
+    let hKeyHandler: (() => void) | null = null;
+
+    beforeEach(() => {
+      scene.create();
+      // Capture the H key handler
+      (scene.input.keyboard?.on as ReturnType<typeof vi.fn>).mock.calls.forEach((call: unknown[]) => {
+        if (call[0] === "keydown-H" && typeof call[1] === "function") {
+          hKeyHandler = call[1] as typeof hKeyHandler;
+        }
+      });
+    });
+
+    it("should call centerCameraOnHub when H key is pressed", () => {
+      const world = createMockWorld({ hubOrigin: { x: 31, y: 31 } });
+      scene.setContext(world, {
+        mode: "place",
+        selectedBuilding: null,
+        direction: "N",
+        selectedRecipe: null,
+        selectedFilter: null,
+        inspectedCoord: null,
+        isDraggingBelt: false,
+        dragStartX: null,
+        dragStartY: null,
+      });
+
+      // Mock isInputFocused to return false
+      (scene as any).isInputFocused = () => false;
+
+      hKeyHandler!();
+
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(1024, 1024);
+    });
+
+    it("should NOT call centerCameraOnHub when input is focused", () => {
+      // Mock isInputFocused to return true
+      (scene as any).isInputFocused = () => true;
+
+      hKeyHandler!();
+
+      // centerOn should not be called again (only from setup)
+      expect(scene.cameras.main.centerOn).toHaveBeenCalledTimes(1);
     });
   });
 });
@@ -714,13 +956,27 @@ describe("FactoryScene syncWorld overlays", () => {
 });
 
 describe("PlacementGhost", () => {
-  let mockScene: { add: { sprite: ReturnType<typeof vi.fn> }; textures: { createCanvas: ReturnType<typeof vi.fn> } };
+  let mockScene: { add: { sprite: ReturnType<typeof vi.fn>; graphics: ReturnType<typeof vi.fn> }; textures: { createCanvas: ReturnType<typeof vi.fn> } };
   let ghostSprite: {
     setAlpha: ReturnType<typeof vi.fn>;
     setDepth: ReturnType<typeof vi.fn>;
     setPosition: ReturnType<typeof vi.fn>;
     setVisible: ReturnType<typeof vi.fn>;
     setTexture: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  };
+  let mockGraphics: {
+    setDepth: ReturnType<typeof vi.fn>;
+    lineStyle: ReturnType<typeof vi.fn>;
+    fillStyle: ReturnType<typeof vi.fn>;
+    fillRect: ReturnType<typeof vi.fn>;
+    strokeRect: ReturnType<typeof vi.fn>;
+    moveTo: ReturnType<typeof vi.fn>;
+    lineTo: ReturnType<typeof vi.fn>;
+    beginPath: ReturnType<typeof vi.fn>;
+    strokePath: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+    setVisible: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
   };
 
@@ -735,9 +991,25 @@ describe("PlacementGhost", () => {
       destroy: vi.fn(),
     };
     
+    mockGraphics = {
+      setDepth: vi.fn(),
+      lineStyle: vi.fn(),
+      fillStyle: vi.fn(),
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      beginPath: vi.fn(),
+      strokePath: vi.fn(),
+      clear: vi.fn(),
+      setVisible: vi.fn(),
+      destroy: vi.fn(),
+    };
+    
     mockScene = {
       add: {
         sprite: vi.fn().mockReturnValue(ghostSprite),
+        graphics: vi.fn().mockReturnValue(mockGraphics),
       },
       textures: {
         createCanvas: vi.fn().mockReturnValue({
