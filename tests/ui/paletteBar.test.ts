@@ -8,7 +8,7 @@ import { createInputState } from "../../src/game/input";
 // Lightweight DOM stub with parentNode tracking and recursive querySelector
 class MockElement {
   public children: MockElement[] = [];
-  public textContent: string = "";
+  private _textContent: string = "";
   public style: Record<string, string> = {};
   public parentNode: MockElement | null = null;
   public ownerDocument: MockDocument | null = null;
@@ -32,6 +32,22 @@ class MockElement {
   }
   get className(): string { return this.classListArr.join(" "); }
   set className(v: string) { this.classListArr = v.trim() ? v.split(/\s+/) : []; }
+
+  get textContent(): string {
+    let text = this._textContent;
+    for (const child of this.children) {
+      text += child.textContent;
+    }
+    return text;
+  }
+  set textContent(v: string) {
+    this._textContent = v;
+    // Clear children when setting textContent directly
+    while (this.children.length > 0) {
+      const child = this.children[this.children.length - 1]!;
+      this.removeChild(child);
+    }
+  }
 
   appendChild(child: MockElement): void { child.parentNode = this; this.children.push(child); }
   removeChild(child: MockElement): void { const i = this.children.indexOf(child); if (i !== -1) { this.children.splice(i, 1); child.parentNode = null; } }
@@ -191,6 +207,39 @@ describe("mountPaletteBar", () => {
     // Clear feedback
     handle.setFeedback(null);
     expect(feedbackElement!.textContent).toBe("");
+    
+    handle.destroy();
+  });
+
+  it("creates canvas icon elements and label spans for building buttons without crashing in Node DOM stub", () => {
+    const onBuildingSelect = vi.fn();
+    const handle = mountPaletteBar(container as unknown as HTMLElement, { onBuildingSelect, onRotate: vi.fn(), onDemolish: vi.fn(), onInspectToggle: vi.fn() });
+    
+    const allBtns = container.querySelectorAll("button");
+    expect(allBtns.length).toBe(12); // 9 building + 3 action
+    
+    // Verify building buttons have canvas icons and labels (first 9 buttons)
+    const buildingBtns = Array.from(allBtns).slice(0, 9);
+    expect(buildingBtns.length).toBe(9);
+    
+    for (const btn of buildingBtns) {
+      // Each building button should have at least 2 children: canvas and span
+      expect(btn.children.length).toBeGreaterThanOrEqual(2);
+      
+      // Check for canvas.icon element
+      const canvas = btn.querySelector(".palette-icon");
+      expect(canvas).toBeDefined();
+      expect(canvas!.tagName).toBe("CANVAS");
+      
+      // Check for label span
+      const label = btn.querySelector(".palette-label");
+      expect(label).toBeDefined();
+      expect(label!.tagName).toBe("SPAN");
+    }
+    
+    // Verify text content still works correctly (combines child text)
+    const minerBtn = allBtns[0]!;
+    expect(minerBtn.textContent).toContain("採掘機");
     
     handle.destroy();
   });

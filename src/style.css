@@ -129,6 +129,25 @@ html, body {
   color: var(--text-secondary);
 }
 
+.palette-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.palette-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+
+.palette-label {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .palette-btn.locked {
   opacity: 0.5;
   cursor: not-allowed;
