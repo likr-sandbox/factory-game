@@ -167,6 +167,8 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     onResetWorld: (seed) => {
       const newWorld = createWorld(seed);
       resetSimulationState(newWorld);
+      scene?.setContext(activeWorld, inputState);
+      scene?.renderTerrainTilemap();
       scene?.syncWorld(activeWorld);
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);

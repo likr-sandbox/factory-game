@@ -3,9 +3,10 @@ import { Scene, GameObjects } from "phaser";
 import type { WorldState, Direction } from "../sim/types";
 import type { InputState } from "./input";
 import { registerAllTextures } from "./textures";
-import { getTerrainTextureKey, getDepositTextureKey } from "./sprites/terrain";
+import { getTerrainTextureKey, getDepositTextureKey, getTerrainVariant, getDepositStage, type DepositStage } from "./sprites/terrain";
 import { getBuildingTextureKey } from "./sprites/buildings";
 import { getItemTextureKey } from "./sprites/items";
+import { computeExposedEdgeMask, getWaterEdgeTextureKey, getRockEdgeTextureKey } from "./sprites/terrainEdges";
 import {
   handleTileClick,
   startBeltDrag,
@@ -34,6 +35,11 @@ export class FactoryScene extends Scene {
   // Explicit sprite tracking to prevent leaks
   private buildingSprites: Map<string, GameObjects.Sprite> = new Map();
   private itemSprites: Map<string, GameObjects.Sprite> = new Map();
+  // Terrain/edge/deposit tracking for tilemap rendering
+  private terrainObjects: GameObjects.Image[] = [];
+  private edgeObjects: Map<string, GameObjects.Image> = new Map();
+  private depositSprites: Map<string, GameObjects.Sprite> = new Map();
+  private depositStageCache: Map<string, DepositStage> = new Map();
   // Status overlay tracking for faulted buildings and depleted deposits
   private faultOverlays: Map<string, GameObjects.Graphics> = new Map();
   private depletedOverlays: Map<string, GameObjects.Graphics> = new Map();
@@ -151,29 +157,73 @@ export class FactoryScene extends Scene {
    * Renders actual terrain and ore deposits from this.world.tiles when bound
    */
   renderTerrainTilemap(): void {
+    // Destroy previous terrain/edge/deposit objects to prevent leaks
+    for (const obj of this.terrainObjects) {
+      obj.destroy();
+    }
+    this.terrainObjects = [];
+    for (const edge of this.edgeObjects.values()) {
+      edge.destroy();
+    }
+    this.edgeObjects.clear();
+    for (const sprite of this.depositSprites.values()) {
+      sprite.destroy();
+    }
+    this.depositSprites.clear();
+    this.depositStageCache.clear();
+
     const worldWidth = 64;
     const worldHeight = 64;
 
     // If world is bound, render actual terrain and deposits from world.tiles
     if (this.world && this.world.tiles.length > 0) {
+      // Build terrain grid for edge computation
+      const terrainGrid = this.world.tiles;
+
       for (let y = 0; y < this.world.height; y++) {
         for (let x = 0; x < this.world.width; x++) {
           const tile = this.world.tiles[y]?.[x];
           if (!tile) continue;
 
-          // Render base terrain
-          const terrainKey = getTerrainTextureKey(tile.terrain, 0);
-          this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey);
+          // Render base terrain with variant
+          const variant = getTerrainVariant(x, y, this.world.seed, tile.terrain);
+          const terrainKey = getTerrainTextureKey(tile.terrain, variant);
+          const terrainObj = this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey);
+          this.terrainObjects.push(terrainObj);
 
-          // Render ore deposit overlay if present
+          // Compute and render edge overlays for water and rock
+          const terrainTypesGrid = terrainGrid.map(row => row.map(t => t.terrain));
+          const mask = computeExposedEdgeMask(terrainTypesGrid, x, y, tile.terrain);
+          if (mask > 0) {
+            let edgeKey: string;
+            if (tile.terrain === "water") {
+              edgeKey = getWaterEdgeTextureKey(mask);
+            } else if (tile.terrain === "rock") {
+              edgeKey = getRockEdgeTextureKey(mask);
+            } else {
+              edgeKey = "";
+            }
+            if (edgeKey) {
+              const edgeObj = this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, edgeKey);
+              edgeObj.setDepth?.(0.2); // Edge overlays terrain but below deposits
+              const edgeKeyWithPos = `${edgeKey}_${x}_${y}`;
+              this.edgeObjects.set(edgeKeyWithPos, edgeObj);
+            }
+          }
+
+          // Render ore deposit with stage
           if (tile.deposit) {
-            const depositKey = getDepositTextureKey(tile.deposit.material, 0);
+            const stage = getDepositStage(tile.deposit.remaining, tile.deposit.initialAmount);
+            const depositKey = getDepositTextureKey(tile.deposit.material, 0, stage);
             const depositSprite = this.add.sprite(
               x * TILE_SIZE + TILE_SIZE / 2,
               y * TILE_SIZE + TILE_SIZE / 2,
               depositKey
             );
-            depositSprite.setDepth(0.5); // Deposit overlays terrain
+            depositSprite.setDepth(0.5); // Deposit overlays terrain and edges
+            const depositKeyWithPos = `${tile.deposit.material}_${x}_${y}`;
+            this.depositSprites.set(depositKeyWithPos, depositSprite);
+            this.depositStageCache.set(depositKeyWithPos, stage);
           }
         }
       }
@@ -182,7 +232,7 @@ export class FactoryScene extends Scene {
       for (let y = 0; y < worldHeight; y++) {
         for (let x = 0; x < worldWidth; x++) {
           const terrainKey = getTerrainTextureKey("grass", 0);
-          this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey);
+          this.terrainObjects.push(this.add.image(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, terrainKey));
         }
       }
     }
@@ -318,6 +368,28 @@ export class FactoryScene extends Scene {
           depletedOverlay.strokePath();
 
           this.depletedOverlays.set(key, depletedOverlay);
+        }
+      }
+    }
+
+    // Update deposit sprite textures when stage changes (dynamic stage updates)
+    for (let y = 0; y < world.height; y++) {
+      for (let x = 0; x < world.width; x++) {
+        const tile = world.tiles[y]?.[x];
+        if (!tile || !tile.deposit) continue;
+
+        const depositKeyWithPos = `${tile.deposit.material}_${x}_${y}`;
+        const newStage = getDepositStage(tile.deposit.remaining, tile.deposit.initialAmount);
+        const cachedStage = this.depositStageCache.get(depositKeyWithPos);
+
+        // If stage changed, update the sprite texture
+        if (cachedStage !== newStage) {
+          const sprite = this.depositSprites.get(depositKeyWithPos);
+          if (sprite) {
+            const newTextureKey = getDepositTextureKey(tile.deposit.material, 0, newStage);
+            sprite.setTexture(newTextureKey);
+            this.depositStageCache.set(depositKeyWithPos, newStage);
+          }
         }
       }
     }

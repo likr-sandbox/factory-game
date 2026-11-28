@@ -54,7 +54,7 @@ describe("FactoryScene basics", () => {
 describe("Texture key helpers", () => {
   it("getTerrainTextureKey/getDepositTextureKey should generate deterministic keys", () => {
     expect(getTerrainTextureKey("grass", 0)).toBe("terrain:grass:seed:0");
-    expect(getDepositTextureKey("iron_ore", 0)).toBe("deposit:iron_ore:seed:0");
+    expect(getDepositTextureKey("iron_ore", 0)).toBe("deposit:iron_ore:seed:0:stage:rich");
   });
 
   it("getBuildingTextureKey/getItemTextureKey should generate correct format", () => {
@@ -86,7 +86,7 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
         spriteCalls.push({ texture });
         return { setDepth: vi.fn(), setName: vi.fn(), destroy: vi.fn() };
       }),
-      image: vi.fn(() => ({ destroy: vi.fn() })),
+      image: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn() })),
       graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
@@ -134,7 +134,7 @@ describe("FactoryScene.syncWorld sprite tracking", () => {
         setName: (n: string) => { setNameCalls.push(n); },
         destroy: vi.fn(() => { destroyCount.value++; }),
       })),
-      image: vi.fn(() => ({ destroy: vi.fn() })),
+      image: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn() })),
       graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
     scene.children = { list: [] } as unknown as typeof scene.children;
@@ -188,7 +188,7 @@ describe("FactoryScene.renderTerrainTilemap", () => {
     scene.add = {
       image: vi.fn((_: number, __: number, texture: string) => {
         imagesCreated.push(texture);
-        return { destroy: vi.fn() };
+        return { setDepth: vi.fn(), destroy: vi.fn() };
       }),
       sprite: vi.fn((_: number, __: number, texture: string) => {
         spritesCreated.push(texture);
@@ -217,8 +217,15 @@ describe("FactoryScene.renderTerrainTilemap", () => {
     }, createInputState());
     scene.renderTerrainTilemap();
 
-    expect(imagesCreated).toEqual(expect.arrayContaining(["terrain:grass:seed:0", "terrain:rock:seed:0", "terrain:water:seed:0"]));
-    expect(spritesCreated).toEqual(expect.arrayContaining(["deposit:iron_ore:seed:0", "deposit:coal:seed:0", "deposit:copper_ore:seed:0"]));
+    // Check that terrain images were created with variant seeds
+    expect(imagesCreated.length).toBeGreaterThan(0);
+    expect(imagesCreated.some((t: string) => t.startsWith("terrain:grass:seed:"))).toBe(true);
+    expect(imagesCreated.some((t: string) => t.startsWith("terrain:rock:seed:"))).toBe(true);
+    expect(imagesCreated.some((t: string) => t.startsWith("terrain:water:seed:"))).toBe(true);
+    // Check that edge overlays were created for boundary tiles
+    expect(imagesCreated.some((t: string) => t.startsWith("edge:"))).toBe(true);
+    
+    expect(spritesCreated).toEqual(expect.arrayContaining(["deposit:iron_ore:seed:0:stage:rich", "deposit:coal:seed:0:stage:rich", "deposit:copper_ore:seed:0:stage:rich"]));
     expect(setDepthCalls.filter((d) => d === 0.5).length).toBe(3);
   });
 
@@ -240,7 +247,7 @@ describe("FactoryScene.renderTerrainTilemap", () => {
       destroy: vi.fn(),
     };
     scene.add = {
-      image: vi.fn((_: number, __: number, texture: string) => { imagesCreated.push(texture); return { destroy: vi.fn() }; }),
+      image: vi.fn((_: number, __: number, texture: string) => { imagesCreated.push(texture); return { setDepth: vi.fn(), destroy: vi.fn() }; }),
       sprite: vi.fn(() => ({ setDepth: vi.fn(), destroy: vi.fn() })),
       graphics: vi.fn(() => mockGraphics),
     } as unknown as typeof scene.add;
