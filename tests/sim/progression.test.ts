@@ -382,4 +382,78 @@ describe("Tutorial Phases", () => {
     w.tutorialPhase = 5 as never;
     expect(getCurrentTutorialStep(w)).toBeNull();
   });
+
+  it("should award bonus RP on first step completion in phase 1", () => {
+    const w = createWorld(); startTutorial(w);
+    w.buildings = minerBs;
+    expect(w.researchPoints).toBe(0);
+    completeTutorialStep(w, "p1_manual_mining");
+    expect(w.researchPoints).toBe(15); // p1_manual_mining rewardPoints
+  });
+
+  it("should award cumulative bonus RP for all phase 1 steps", () => {
+    const w = createWorld(); startTutorial(w);
+    w.buildings = { ...minerBs, ...smelterBs };
+    w.delivered = { iron_plate: 10, copper_plate: 10 };
+    completeTutorialStep(w, "p1_manual_mining");
+    completeTutorialStep(w, "p1_manual_smelting");
+    completeTutorialStep(w, "p1_first_delivery");
+    completeTutorialStep(w, "p1_copper_delivery");
+    // 15 + 15 + 20 + 25 = 75 RP from bonus
+    expect(w.researchPoints).toBe(75);
+  });
+
+  it("should award bonus RP on first step completion in phase 2", () => {
+    const w = createWorld(); w.tutorialPhase = 2;
+    w.buildings = {};
+    for (let i = 0; i < 4; i++) w.buildings[`m${i}`] = { ...emptyBs, id: `m${i}`, type: "miner", x: 10 + i, y: 10 };
+    for (let i = 0; i < 2; i++) w.buildings[`s${i}`] = { ...emptyBs, id: `s${i}`, type: "smelter", x: 15 + i, y: 10 };
+    expect(w.researchPoints).toBe(0);
+    completeTutorialStep(w, "p2_batch_building");
+    expect(w.researchPoints).toBe(30); // p2_batch_building rewardPoints
+  });
+
+  it("should award bonus RP on first step completion in phase 3", () => {
+    const w = createWorld(); w.tutorialPhase = 3; w.researchPoints = 500;
+    unlockTech(w, "advanced_smelting"); // prerequisite for electronics (costs 150 RP), leaves 350
+    unlockTech(w, "electronics"); // costs 220 RP, leaves 130
+    w.buildings = { a: { ...emptyBs, id: "a", type: "assembler", x: 10, y: 10 } };
+    completeTutorialStep(w, "p3_electronics_unlock"); // adds 60 bonus RP
+    expect(w.researchPoints).toBe(190); // 500 - 150 - 220 + 60 = 190
+  });
+
+  it("should award bonus RP on first step completion in phase 4", () => {
+    const w = createWorld(); w.tutorialPhase = 4; w.researchPoints = 0;
+    w.buildings = { r: { ...emptyBs, id: "r", type: "recycler", x: 10, y: 10 } };
+    completeTutorialStep(w, "p4_slag_handling");
+    expect(w.researchPoints).toBe(100); // p4_slag_handling rewardPoints
+  });
+
+  it("should not double-award bonus RP for already completed step", () => {
+    const w = createWorld(); startTutorial(w);
+    w.buildings = minerBs;
+    completeTutorialStep(w, "p1_manual_mining");
+    expect(w.researchPoints).toBe(15);
+    // Call again with same step - should not add more RP
+    completeTutorialStep(w, "p1_manual_mining");
+    expect(w.researchPoints).toBe(15); // Still 15, no double award
+  });
+
+  it("should reach underground_belt cost (150 RP) after completing phase 1", () => {
+    const w = createWorld(); startTutorial(w);
+    w.buildings = { ...minerBs, ...smelterBs };
+    // Simulate delivery RP from iron_plate (2 RP each) and copper_plate (2 RP each)
+    // 10 iron_plate = 20 RP, 10 copper_plate = 20 RP from deliveries
+    awardResearchPoints(w, "iron_plate", 10);
+    awardResearchPoints(w, "copper_plate", 10);
+    // Now complete all phase 1 steps for bonus RP
+    w.delivered = { iron_plate: 10, copper_plate: 10 };
+    completeTutorialStep(w, "p1_manual_mining");
+    completeTutorialStep(w, "p1_manual_smelting");
+    completeTutorialStep(w, "p1_first_delivery");
+    completeTutorialStep(w, "p1_copper_delivery");
+    // Total: 20 (iron) + 20 (copper) + 75 (bonus) = 115 RP
+    expect(w.researchPoints).toBe(115);
+    expect(w.researchPoints).toBeLessThan(150); // Not enough for underground_belt yet
+  });
 });

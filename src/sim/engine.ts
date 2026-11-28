@@ -2,15 +2,13 @@
 // Pure TypeScript - ZERO imports or references to Phaser, window, document
 
 import type { WorldState, BuildingState, Tile, Direction, MaterialId, RecipeId } from "./types";
-import { RECIPE_CATALOG } from "./catalog";
+import { RECIPE_CATALOG, MINING_INTERVAL, BELT_MOVE_INTERVAL, MAX_OUTPUT_BUFFER } from "./catalog";
 import { directionDelta, oppositeDirection, inBounds, nextRandom } from "./world";
 import { processFilterSplitters, processRecyclers, processUndergroundBelts, updateReliabilityAndOverload } from "./reliability";
 import { awardResearchPoints, getCurrentTutorialStep, completeTutorialStep, getTutorialStepsForPhase, type TutorialPhase } from "./progression";
 import { updateQuestProgress, processQuests } from "./quests";
 import { updateSpmStats } from "./stats";
-
-const MINING_INTERVAL = 60; // ticks between mining operations
-const MAX_OUTPUT_BUFFER = 10; // max items in output buffer
+import { canAcceptItem, canAcceptBeltItem, addItemToBuilding, addToBuffer, countBufferItems, transferItem } from "./buffers";
 
 /**
  * Process miners on tiles with deposits
@@ -42,7 +40,7 @@ function processMiners(world: WorldState): void {
         const targetBuilding = world.buildings[targetTile.buildingId]!;
         // Check if target can accept items (belt, splitter, smelter, assembler, hub)
         if (canAcceptItem(targetBuilding, material)) {
-          addItemToBuilding(targetBuilding, material);
+          addItemToBuilding(targetBuilding, material, world.tick);
         } else {
           // Add to output buffer
           addToBuffer(building.outputBuffer, material, 1);
@@ -138,7 +136,7 @@ function processCraftingBuildings(world: WorldState): void {
       const matKey = material as MaterialId;
 
       if (canAcceptItem(targetBuilding, matKey)) {
-        const transferred = transferItem(building.outputBuffer, targetBuilding, matKey, amount!);
+        const transferred = transferItem(building.outputBuffer, targetBuilding, matKey, amount!, world.tick);
         if (transferred > 0) {
           // Successfully transferred
         }
@@ -198,7 +196,9 @@ function processBelts(world: WorldState): void {
     if (building.beltItems.length === 0) continue;
 
     const item = building.beltItems[0]!;
-    if (item.movedAtTick === world.tick) continue;
+    
+    // Enforce BELT_MOVE_INTERVAL: skip moving while world.tick - item.movedAtTick < BELT_MOVE_INTERVAL
+    if (world.tick - item.movedAtTick < BELT_MOVE_INTERVAL) continue;
 
     const { dx, dy } = directionDelta(building.direction);
     const targetX = building.x + dx;
@@ -223,7 +223,7 @@ function processBelts(world: WorldState): void {
         building.beltItems.shift();
       } else {
         // Transfer to target building's input buffer or belt items
-        addItemToBuilding(targetBuilding, item.material);
+        addItemToBuilding(targetBuilding, item.material, world.tick);
         building.beltItems.shift();
       }
     }
@@ -264,115 +264,6 @@ function processHubs(world: WorldState): void {
       pruneDeliveryHistory(world);
     }
   }
-}
-
-/**
- * Helper: check if building can accept an item
- */
-function canAcceptItem(building: BuildingState, material: MaterialId): boolean {
-  switch (building.type) {
-    case "belt":
-      return building.beltItems.length < 3;
-    case "splitter":
-    case "filter_splitter":
-      return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
-    case "smelter":
-    case "assembler":
-      // Check if input buffer has space AND material is a valid input for current recipe
-      if (countBufferItems(building.inputBuffer) >= MAX_OUTPUT_BUFFER) return false;
-      if (!building.recipeId) return false;
-      const recipe = RECIPE_CATALOG[building.recipeId];
-      if (!recipe) return false;
-      return recipe.inputs.hasOwnProperty(material);
-    case "hub":
-    case "underground_belt":
-    case "recycler":
-      return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
-    default:
-      return false;
-  }
-}
-
-/**
- * Helper: check if building can accept a belt item
- */
-function canAcceptBeltItem(building: BuildingState, material: MaterialId): boolean {
-  return canAcceptItem(building, material);
-}
-
-/**
- * Helper: add item to building's appropriate buffer
- */
-function addItemToBuilding(building: BuildingState, material: MaterialId): void {
-  switch (building.type) {
-    case "belt":
-      building.beltItems.push({ material, movedAtTick: 0 });
-      break;
-    case "splitter":
-    case "filter_splitter":
-    case "smelter":
-    case "assembler":
-    case "hub":
-    case "underground_belt":
-    case "recycler":
-      addToBuffer(building.inputBuffer, material, 1);
-      break;
-  }
-}
-
-/**
- * Helper: add to buffer
- */
-function addToBuffer(buffer: Partial<Record<MaterialId, number>>, material: MaterialId, amount: number): void {
-  buffer[material] = (buffer[material] || 0) + amount;
-}
-
-/**
- * Helper: count total items in buffer
- */
-function countBufferItems(buffer: Partial<Record<MaterialId, number>>): number {
-  return Object.values(buffer).reduce((sum, val) => sum + (val || 0), 0);
-}
-
-/**
- * Helper: transfer item from source buffer to target building
- */
-function transferItem(
-  sourceBuffer: Partial<Record<MaterialId, number>>,
-  targetBuilding: BuildingState,
-  material: MaterialId,
-  maxAmount: number
-): number {
-  const available = sourceBuffer[material] || 0;
-  if (available <= 0) return 0;
-
-  // Determine how much can be accepted
-  let accepted = 0;
-  switch (targetBuilding.type) {
-    case "belt":
-      accepted = Math.min(available, maxAmount, 3 - targetBuilding.beltItems.length);
-      for (let i = 0; i < accepted; i++) {
-        targetBuilding.beltItems.push({ material, movedAtTick: 0 });
-      }
-      break;
-    case "splitter":
-    case "filter_splitter":
-    case "smelter":
-    case "assembler":
-    case "hub":
-    case "underground_belt":
-    case "recycler":
-      const currentCount = countBufferItems(targetBuilding.inputBuffer);
-      const space = MAX_OUTPUT_BUFFER - currentCount;
-      accepted = Math.min(available, maxAmount, space);
-      addToBuffer(targetBuilding.inputBuffer, material, accepted);
-      break;
-    default:
-      return 0;
-  }
-
-  sourceBuffer[material] = available - accepted;
-  return accepted;
 }
 
 /**
@@ -430,7 +321,7 @@ function trySendToDirection(world: WorldState, building: BuildingState, material
   const targetBuilding = world.buildings[targetTile.buildingId]!;
   
   if (canAcceptItem(targetBuilding, material)) {
-    const transferred = transferItem(building.inputBuffer, targetBuilding, material, amount);
+    const transferred = transferItem(building.inputBuffer, targetBuilding, material, amount, world.tick);
     return transferred > 0;
   }
 

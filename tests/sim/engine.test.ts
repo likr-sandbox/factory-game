@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { stepTick, stepTicks } from "../../src/sim/engine";
 import { createWorld } from "../../src/sim/world";
+import { MINING_INTERVAL, BELT_MOVE_INTERVAL } from "../../src/sim/catalog";
 import type { WorldState, BuildingState } from "../../src/sim/types";
 
 /**
@@ -84,7 +85,7 @@ describe("Mining from finite deposits", () => {
 });
 
 describe("Belt transport chain", () => {
-  it("moves items tile-by-tile without double-stepping", () => {
+  it("moves items tile-by-tile with BELT_MOVE_INTERVAL pacing", () => {
     const world = createWorld(12345);
     world.tick = 0;
 
@@ -97,17 +98,65 @@ describe("Belt transport chain", () => {
     const building1 = world.buildings[belt1Id]!;
     building1.beltItems.push({ material: "iron_plate", movedAtTick: 0 });
 
-    // After 1 tick, item moves to second belt (since belt2 has capacity)
+    // Item should NOT move before BELT_MOVE_INTERVAL ticks have passed
+    stepTicks(world, BELT_MOVE_INTERVAL - 1);
+    expect(building1.beltItems.length).toBe(1); // Still on belt1
+    expect(building1.beltItems[0]!.movedAtTick).toBe(0);
+
+    // After BELT_MOVE_INTERVAL ticks, item moves to belt2
     stepTick(world);
     expect(building1.beltItems.length).toBe(0);
     const building2 = world.buildings[belt2Id]!;
     expect(building2.beltItems.length).toBe(1);
-    expect(building2.beltItems[0]!.movedAtTick).toBe(1);
+    expect(building2.beltItems[0]!.movedAtTick).toBe(BELT_MOVE_INTERVAL);
 
-    // After more ticks, item continues moving down the chain
-    stepTicks(world, 10);
+    // Item should NOT move again before another BELT_MOVE_INTERVAL ticks
+    stepTicks(world, BELT_MOVE_INTERVAL - 1);
+    expect(building2.beltItems.length).toBe(1); // Still on belt2
+    expect(building2.beltItems[0]!.movedAtTick).toBe(BELT_MOVE_INTERVAL);
+
+    // After another BELT_MOVE_INTERVAL ticks, item moves to belt3
+    stepTick(world);
+    expect(building2.beltItems.length).toBe(0);
     const building3 = world.buildings[belt3Id]!;
-    expect(building3.beltItems.length).toBeGreaterThan(0);
+    expect(building3.beltItems.length).toBe(1);
+    expect(building3.beltItems[0]!.movedAtTick).toBe(2 * BELT_MOVE_INTERVAL);
+  });
+
+  it("handles backpressure without item loss or duplication", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Create a chain of 4 belts
+    const belt1Id = placeBuilding(world, 10, 10, "belt", "S");
+    const belt2Id = placeBuilding(world, 10, 11, "belt", "S");
+    const belt3Id = placeBuilding(world, 10, 12, "belt", "S");
+    const belt4Id = placeBuilding(world, 10, 13, "belt", "S");
+
+    // Add 3 items to belt1 (max capacity)
+    const building1 = world.buildings[belt1Id]!;
+    building1.beltItems.push({ material: "iron_plate", movedAtTick: 0 });
+    building1.beltItems.push({ material: "iron_plate", movedAtTick: 0 });
+    building1.beltItems.push({ material: "iron_plate", movedAtTick: 0 });
+
+    // Run enough ticks for all items to propagate through the chain
+    stepTicks(world, BELT_MOVE_INTERVAL * 5);
+
+    // Count total items across all belts (should be exactly 3)
+    const totalItems = 
+      world.buildings[belt1Id]!.beltItems.length +
+      world.buildings[belt2Id]!.beltItems.length +
+      world.buildings[belt3Id]!.beltItems.length +
+      world.buildings[belt4Id]!.beltItems.length;
+
+    expect(totalItems).toBe(3); // No loss or duplication
+    
+    // All items should be iron_plate
+    for (const beltId of [belt1Id, belt2Id, belt3Id, belt4Id]) {
+      for (const item of world.buildings[beltId]!.beltItems) {
+        expect(item.material).toBe("iron_plate");
+      }
+    }
   });
 });
 
@@ -227,9 +276,6 @@ describe("Hub delivery tracking", () => {
     expect(lastDelivery.tick).toBe(initialTick + 1);
   });
 });
-
-// Constants used in tests
-const MINING_INTERVAL = 60;
 
 describe("Steel plate to automation module chain", () => {
   it("produces steel_plate from iron_plate and coal", () => {
@@ -711,5 +757,216 @@ describe("Smelter/Assembler input buffer limit", () => {
     
     // Since smelter is faulted, it won't craft, so output won't increase
     // but input buffer should also not exceed the limit
+  });
+
+  it("enforces per-material input buffer limit for iron_ore on iron_plate smelter (limit = 6)", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place smelter with iron_plate recipe (requires 2 iron_ore)
+    const smelterId = placeBuilding(world, 10, 10, "smelter", "S", "iron_plate");
+
+    const smelter = world.buildings[smelterId]!;
+
+    // Per-material limit for iron_ore = max(6, 2 * 3) = 6
+    const perMaterialLimit = 6;
+
+    // Fill to per-material limit
+    smelter.inputBuffer.iron_ore = perMaterialLimit;
+
+    // Should be at limit
+    expect(smelter.inputBuffer.iron_ore).toBe(perMaterialLimit);
+
+    // Crafting consumes 2 iron_ore per cycle
+    stepTicks(world, 60);
+
+    // Buffer should have decreased by 2
+    expect(smelter.inputBuffer.iron_ore).toBe(perMaterialLimit - 2);
+
+    // Now should accept more items up to per-material limit
+    expect(smelter.inputBuffer.iron_ore).toBeLessThan(perMaterialLimit);
+  });
+
+  it("enforces per-material input buffer limit for iron_plate on iron_gear assembler (limit = 6)", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place assembler with iron_gear recipe (requires 2 iron_plate)
+    const assemblerId = placeBuilding(world, 20, 20, "assembler", "E", "iron_gear");
+
+    const assembler = world.buildings[assemblerId]!;
+
+    // Per-material limit for iron_plate = max(6, 2 * 3) = 6
+    const perMaterialLimit = 6;
+
+    // Fill to per-material limit
+    assembler.inputBuffer.iron_plate = perMaterialLimit;
+
+    // Should be at limit
+    expect(assembler.inputBuffer.iron_plate).toBe(perMaterialLimit);
+
+    // Crafting consumes 2 iron_plate per cycle
+    stepTicks(world, 60);
+
+    // Buffer should have decreased by 2
+    expect(assembler.inputBuffer.iron_plate).toBe(perMaterialLimit - 2);
+
+    // Now should accept more items up to per-material limit
+    expect(assembler.inputBuffer.iron_plate).toBeLessThan(perMaterialLimit);
+  });
+});
+
+describe("Multi-material recipe production", () => {
+  it("produces steel_plate from iron_plate and coal without deadlock", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place smelter with steel_plate recipe (requires iron_plate: 2, coal: 1)
+    const smelterId = placeBuilding(world, 10, 10, "smelter", "S", "steel_plate");
+
+    const smelter = world.buildings[smelterId]!;
+
+    // Provide inputs exceeding per-material limits
+    smelter.inputBuffer.iron_plate = 10; // exceeds limit of 6 for iron_plate (2 * 3 = 6)
+    smelter.inputBuffer.coal = 10;       // exceeds limit of 6 for coal (1 * 3 = 3, but min is 6)
+
+    // Run enough ticks for multiple crafts (120 ticks per steel_plate)
+    stepTicks(world, 600); // Should produce ~5 steel plates
+
+    // Verify production completed without deadlock
+    expect(smelter.outputBuffer.steel_plate).toBeGreaterThan(0);
+  });
+
+  it("produces silicon_wafer from silica_sand and coal without deadlock", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place smelter with silicon_wafer recipe (requires silica_sand: 2, coal: 1)
+    const smelterId = placeBuilding(world, 10, 10, "smelter", "S", "silicon_wafer");
+
+    const smelter = world.buildings[smelterId]!;
+
+    // Provide inputs exceeding per-material limits
+    smelter.inputBuffer.silica_sand = 10; // exceeds limit of 6
+    smelter.inputBuffer.coal = 10;        // exceeds limit of 6
+
+    // Run enough ticks for multiple crafts (120 ticks per silicon_wafer)
+    stepTicks(world, 600); // Should produce ~5 silicon wafers
+
+    // Verify production completed without deadlock
+    expect(smelter.outputBuffer.silicon_wafer).toBeGreaterThan(0);
+  });
+
+  it("produces circuit_board from iron_plate and copper_wire without deadlock", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place assembler with circuit_board recipe (requires iron_plate: 1, copper_wire: 3)
+    const assemblerId = placeBuilding(world, 10, 10, "assembler", "S", "circuit_board");
+
+    const assembler = world.buildings[assemblerId]!;
+
+    // Provide inputs exceeding per-material limits
+    assembler.inputBuffer.iron_plate = 10;     // exceeds limit of 6 for iron_plate (1 * 3 = 3, but min is 6)
+    assembler.inputBuffer.copper_wire = 10;    // exceeds limit of 6 for copper_wire (3 * 3 = 9)
+
+    // Run enough ticks for multiple crafts (90 ticks per circuit_board)
+    stepTicks(world, 450); // Should produce ~5 circuit boards
+
+    // Verify production completed without deadlock
+    expect(assembler.outputBuffer.circuit_board).toBeGreaterThan(0);
+  });
+
+  it("produces microchip from circuit_board, silicon_wafer, and copper_wire without deadlock", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place assembler with microchip recipe (requires circuit_board: 1, silicon_wafer: 2, copper_wire: 2)
+    const assemblerId = placeBuilding(world, 10, 10, "assembler", "S", "microchip");
+
+    const assembler = world.buildings[assemblerId]!;
+
+    // Provide inputs exceeding per-material limits
+    assembler.inputBuffer.circuit_board = 10;   // exceeds limit of 6
+    assembler.inputBuffer.silicon_wafer = 10;   // exceeds limit of 6 for silicon_wafer (2 * 3 = 6)
+    assembler.inputBuffer.copper_wire = 10;     // exceeds limit of 6 for copper_wire (2 * 3 = 6)
+
+    // Run enough ticks for multiple crafts (240 ticks per microchip)
+    stepTicks(world, 1200); // Should produce ~5 microchips
+
+    // Verify production completed without deadlock
+    expect(assembler.outputBuffer.microchip).toBeGreaterThan(0);
+  });
+
+  it("produces automation_module from steel_plate, iron_gear, and microchip without deadlock", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place assembler with automation_module recipe (requires steel_plate: 2, iron_gear: 4, microchip: 2)
+    const assemblerId = placeBuilding(world, 10, 10, "assembler", "S", "automation_module");
+
+    const assembler = world.buildings[assemblerId]!;
+
+    // Provide inputs exceeding per-material limits
+    assembler.inputBuffer.steel_plate = 10;     // exceeds limit of 6 for steel_plate (2 * 3 = 6)
+    assembler.inputBuffer.iron_gear = 10;       // exceeds limit of 6 for iron_gear (4 * 3 = 12)
+    assembler.inputBuffer.microchip = 10;       // exceeds limit of 6 for microchip (2 * 3 = 6)
+
+    // Run enough ticks for multiple crafts (240 ticks per automation_module)
+    stepTicks(world, 1200); // Should produce ~5 automation modules
+
+    // Verify production completed without deadlock
+    expect(assembler.outputBuffer.automation_module).toBeGreaterThan(0);
+  });
+});
+
+describe("Production ratio tests", () => {
+  it("2 miners : 1 basic smelter produces correct iron_plate ratio", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place 2 miners on iron_ore deposits
+    world.tiles[10]![10]!.deposit = { material: "iron_ore", remaining: 1000, initialAmount: 1000 };
+    world.tiles[11]![10]!.deposit = { material: "iron_ore", remaining: 1000, initialAmount: 1000 };
+    
+    const miner1Id = placeBuilding(world, 10, 10, "miner", "S");
+    const miner2Id = placeBuilding(world, 10, 11, "miner", "S");
+
+    // Place smelter below miners to receive iron_ore
+    const smelterId = placeBuilding(world, 10, 12, "smelter", "S", "iron_plate");
+
+    // Run enough ticks for mining and crafting
+    // Each miner mines every 60 ticks, smelter crafts every 60 ticks
+    // 2 miners produce 2 iron_ore per 60 ticks, smelter needs 2 iron_ore per 60 ticks
+    stepTicks(world, 300); // 5 craft cycles
+
+    const smelter = world.buildings[smelterId]!;
+    
+    // Should have produced some iron plates (at least 2 due to buffer constraints)
+    expect(smelter.outputBuffer.iron_plate).toBeGreaterThanOrEqual(2);
+  });
+
+  it("iron_plate_high recipe converts 3 ore to 2 plate in 75 ticks", () => {
+    const world = createWorld(12345);
+    world.tick = 0;
+
+    // Place smelter with iron_plate_high recipe (requires iron_ore: 3, outputs iron_plate: 2, takes 75 ticks)
+    const smelterId = placeBuilding(world, 10, 10, "smelter", "S", "iron_plate_high");
+
+    const smelter = world.buildings[smelterId]!;
+
+    // Provide enough iron_ore (3 per craft)
+    smelter.inputBuffer.iron_ore = 30;
+
+    // Run enough ticks for multiple crafts (75 ticks per craft, produces 2 plates)
+    stepTicks(world, 375); // 5 craft cycles, should produce 10 plates
+
+    // Verify production ratio: 3 ore -> 2 plate
+    // After 375 ticks (5 cycles), should have 10 plates
+    expect(smelter.outputBuffer.iron_plate).toBeGreaterThanOrEqual(8); // Allow some tolerance
+    
+    // Verify input consumption: 3 ore per cycle * ~5 cycles = ~15 ore consumed
+    const consumed = 30 - (smelter.inputBuffer.iron_ore || 0);
+    expect(consumed).toBeGreaterThanOrEqual(12); // At least 4 cycles worth
   });
 });

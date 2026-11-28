@@ -4,6 +4,16 @@
 import type { MaterialId, BuildingType, RecipeId, TechId } from "./types";
 
 // ============================================================================
+// Balance Constants
+// ============================================================================
+
+export const MINING_INTERVAL = 60;
+export const BELT_MOVE_INTERVAL = 10;
+export const MAX_OUTPUT_BUFFER = 10;
+export const MIN_INPUT_BUFFER_PER_MATERIAL = 6;
+export const INPUT_BUFFER_MULTIPLIER = 3;
+
+// ============================================================================
 // Material Catalog
 // ============================================================================
 
@@ -95,7 +105,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "smelter",
     inputs: { iron_ore: 3 },
     outputs: { iron_plate: 2 },
-    craftTicks: 90,
+    craftTicks: 75,
     unlockedByDefault: false,
     slagChance: 0.15,
   },
@@ -105,7 +115,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "smelter",
     inputs: { copper_ore: 3 },
     outputs: { copper_plate: 2 },
-    craftTicks: 90,
+    craftTicks: 75,
     unlockedByDefault: false,
     slagChance: 0.15,
   },
@@ -115,7 +125,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "assembler",
     inputs: { iron_plate: 2 },
     outputs: { iron_gear: 1 },
-    craftTicks: 90,
+    craftTicks: 60,
     unlockedByDefault: true,
   },
   copper_wire: {
@@ -153,7 +163,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "assembler",
     inputs: { iron_plate: 1, copper_wire: 3 },
     outputs: { circuit_board: 1 },
-    craftTicks: 120,
+    craftTicks: 90,
     unlockedByDefault: false,
   },
   microchip: {
@@ -162,7 +172,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "assembler",
     inputs: { circuit_board: 1, silicon_wafer: 2, copper_wire: 2 },
     outputs: { microchip: 1 },
-    craftTicks: 180,
+    craftTicks: 240,
     unlockedByDefault: false,
   },
   automation_module: {
@@ -268,63 +278,83 @@ export interface QuestEntry {
   deliver?: Partial<Record<MaterialId, number>>;
   build?: Partial<Record<BuildingType, number>>;
   targetSpm?: number;
+  rewardPoints: number;
 }
 
 export const QUEST_CATALOG: Record<string, QuestEntry> = {
-  "tutorial_iron": {
-    id: "tutorial_iron",
-    nameJa: "鉄の納品",
-    description: "鉄板を 10 個ハブに納品しましょう",
+  // Phase 1: Basic materials
+  "iron_plate": {
+    id: "iron_plate",
+    nameJa: "鉄板納品ミッション",
+    description: "鉄板を 15 個ハブに納品しましょう",
     phase: 1,
-    deliver: { iron_plate: 10 },
+    deliver: { iron_plate: 15 },
+    rewardPoints: 50,
   },
-  "tutorial_copper": {
-    id: "tutorial_copper",
-    nameJa: "銅の納品",
-    description: "銅板を 10 個ハブに納品しましょう",
+  "copper_plate": {
+    id: "copper_plate",
+    nameJa: "銅板納品ミッション",
+    description: "銅板を 15 個ハブに納品しましょう",
     phase: 1,
-    deliver: { copper_plate: 10 },
+    deliver: { copper_plate: 15 },
+    rewardPoints: 50,
   },
-  "tutorial_gears": {
-    id: "tutorial_gears",
-    nameJa: "歯車の生産",
-    description: "鉄歯車を 5 個生産しましょう",
+  "iron_gear": {
+    id: "iron_gear",
+    nameJa: "鉄歯車納品ミッション",
+    description: "鉄歯車を 8 個ハブに納品しましょう",
     phase: 1,
-    deliver: { iron_gear: 5 },
+    deliver: { iron_gear: 8 },
+    rewardPoints: 80,
   },
-  "phase2_setup": {
-    id: "phase2_setup",
-    nameJa: "自動化ライン構築",
-    description: "採掘ドリル 4 基と溶鉱炉 2 基を設置",
+  "copper_wire": {
+    id: "copper_wire",
+    nameJa: "銅線納品ミッション",
+    description: "銅線を 12 個ハブに納品しましょう",
+    phase: 1,
+    deliver: { copper_wire: 12 },
+    rewardPoints: 80,
+  },
+  // Phase 2/3: Advanced materials
+  "steel_plate": {
+    id: "steel_plate",
+    nameJa: "鋼板納品ミッション",
+    description: "鋼板を 10 個ハブに納品しましょう",
     phase: 2,
-    build: { miner: 4, smelter: 2 },
+    deliver: { steel_plate: 10 },
+    rewardPoints: 120,
   },
-  "phase2_delivery": {
-    id: "phase2_delivery",
-    nameJa: "安定供給",
-    description: "鉄板を 50 個、銅板を 50 個納品",
-    phase: 2,
-    deliver: { iron_plate: 50, copper_plate: 50 },
-  },
-  "phase3_electronics": {
-    id: "phase3_electronics",
-    nameJa: "電子部品ライン",
-    description: "銅線 20 個と電子基板 5 個を納品",
+  "silicon_wafer": {
+    id: "silicon_wafer",
+    nameJa: "シリコンウェハ納品ミッション",
+    description: "シリコンウェハを 8 個ハブに納品しましょう",
     phase: 3,
-    deliver: { copper_wire: 20, circuit_board: 5 },
+    deliver: { silicon_wafer: 8 },
+    rewardPoints: 120,
   },
-  "phase3_throughput": {
-    id: "phase3_throughput",
-    nameJa: "高スループット",
-    description: "目標 SPM 10 を達成",
+  "circuit_board": {
+    id: "circuit_board",
+    nameJa: "電子基板納品ミッション",
+    description: "電子基板を 5 個ハブに納品しましょう",
     phase: 3,
-    targetSpm: 10,
+    deliver: { circuit_board: 5 },
+    rewardPoints: 120,
   },
-  "phase4_mastery": {
-    id: "phase4_mastery",
-    nameJa: "完全自動化",
-    description: "マイクロチップ 10 個と自動化モジュール 3 個を納品",
+  // Phase 3/4: Final products
+  "microchip": {
+    id: "microchip",
+    nameJa: "マイクロチップ納品ミッション",
+    description: "マイクロチップを 3 個ハブに納品しましょう",
+    phase: 3,
+    deliver: { microchip: 3 },
+    rewardPoints: 180,
+  },
+  "automation_module": {
+    id: "automation_module",
+    nameJa: "自動化モジュール納品ミッション",
+    description: "自動化モジュールを 2 個ハブに納品しましょう",
     phase: 4,
-    deliver: { microchip: 10, automation_module: 3 },
+    deliver: { automation_module: 2 },
+    rewardPoints: 250,
   },
 };
