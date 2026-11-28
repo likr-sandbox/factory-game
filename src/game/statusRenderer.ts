@@ -5,10 +5,10 @@ import { getMaterialColor, UI_PALETTE } from "./palette";
 
 export interface Graphics {
   clear(): void; setAlpha(a: number): void; fillRect(x: number, y: number, w: number, h: number): void;
-  fillCircle(x: number, y: number, r: number): void; lineWidth(w: number): void; lineColor(r: number, g: number, b: number, a?: number): void;
-  fillStyle(c: string, a?: number): void; setPosition(x: number, y: number): void; destroy(): void;
+  fillCircle(x: number, y: number, r: number): void; fillStyle(color: number, alpha?: number): void;
+  setPosition(x: number, y: number): void; setDepth(depth: number): void; destroy(): void;
 }
-export interface Scene { add: { graphics(): Graphics }; }
+export interface Scene<T extends Graphics = Graphics> { add: { graphics(): T }; }
 
 /** Calculate animation frame (0|1) for a building based on type and world state. */
 export function getBuildingAnimationFrame(building: BuildingState, world: WorldState): 0 | 1 {
@@ -54,9 +54,9 @@ export function drawFaultIndicator(graphics: Graphics, isHub: boolean, worldTick
   const blink = Math.floor(worldTick / 15) % 2 === 0 ? 1 : 0.45;
   graphics.setAlpha(blink);
   const badgeY = isHub ? -32 : -16;
-  graphics.fillStyle(UI_PALETTE.fault.hex, blink);
+  graphics.fillStyle(parseInt(UI_PALETTE.fault.hex.slice(1), 16), blink);
   graphics.fillCircle(0, badgeY, 10);
-  graphics.fillStyle("#FFFFFF", 1);
+  graphics.fillStyle(0xFFFFFF, 1);
   graphics.fillRect(-2, badgeY - 8, 4, 12);
   graphics.fillRect(-2, badgeY + 4, 4, 4);
 }
@@ -64,14 +64,14 @@ export function drawFaultIndicator(graphics: Graphics, isHub: boolean, worldTick
 /** Draw depleted indicator (red X mark) centered at local (0,0). */
 export function drawDepletedIndicator(graphics: Graphics): void {
   graphics.clear();
-  graphics.fillStyle(UI_PALETTE.fault.hex, 1);
+  graphics.fillStyle(parseInt(UI_PALETTE.fault.hex.slice(1), 16), 1);
   graphics.fillCircle(-5, -5, 3); graphics.fillCircle(5, 5, 3);
   graphics.fillCircle(5, -5, 3); graphics.fillCircle(-5, 5, 3);
   graphics.fillCircle(0, 0, 4);
 }
 
 /** Sync status overlay Graphics objects using ID-based diffing. */
-export function syncBuildingStatusOverlays(scene: Scene, overlays: Map<string, Graphics>, world: WorldState): void {
+export function syncBuildingStatusOverlays<T extends Graphics>(scene: Scene<T>, overlays: Map<string, T>, world: WorldState): void {
   const neededIds = new Set<string>();
   for (const building of Object.values(world.buildings)) {
     const needsOverlay =
@@ -85,6 +85,7 @@ export function syncBuildingStatusOverlays(scene: Scene, overlays: Map<string, G
       if (!overlay) { overlay = scene.add.graphics(); overlays.set(building.id, overlay); }
       renderOverlay(overlay, building, world.tick);
       overlay.setPosition(building.x * 32 + 16, building.y * 32 + 16);
+      overlay.setDepth(building.y + 1);
     }
   }
   for (const [id, overlay] of overlays.entries()) {
@@ -96,18 +97,18 @@ function renderOverlay(g: Graphics, b: BuildingState, tick: number): void {
   g.clear();
   if ((b.type === "smelter" || b.type === "assembler") && b.recipeId != null && b.craftProgress > 0) {
     const recipe = RECIPE_CATALOG[b.recipeId], ratio = Math.min(1, b.craftProgress / recipe.craftTicks);
-    g.fillStyle("#333333", 0.7); g.fillRect(-14, 14, 28, 6);
-    g.fillStyle("#00FF00", 1); g.fillRect(-14, 14, 28 * ratio, 6);
+    g.fillStyle(0x333333, 0.7); g.fillRect(-14, 14, 28, 6);
+    g.fillStyle(0x00FF00, 1); g.fillRect(-14, 14, 28 * ratio, 6);
   }
-  let color: string | null = null;
+  let color: number | null = null;
   if (b.type === "smelter" || b.type === "assembler") {
     if (b.recipeId != null) {
       const outputs = Object.keys(RECIPE_CATALOG[b.recipeId].outputs);
-      if (outputs.length > 0) color = getMaterialColor(outputs[0] as never).hex;
+      if (outputs.length > 0) color = parseInt(getMaterialColor(outputs[0] as never).hex.slice(1), 16);
     }
   } else if (b.type === "filter_splitter" && b.filterMaterial != null) {
-    color = getMaterialColor(b.filterMaterial).hex;
+    color = parseInt(getMaterialColor(b.filterMaterial).hex.slice(1), 16);
   }
   if (color != null) { g.fillStyle(color, 1); g.fillCircle(-16, -20, 5); }
-  if ((b.blockedTicks ?? 0) >= 30 && !b.faulted) { g.fillStyle(UI_PALETTE.warning.hex, 1); g.fillCircle(16, -20, 5); }
+  if ((b.blockedTicks ?? 0) >= 30 && !b.faulted) { g.fillStyle(parseInt(UI_PALETTE.warning.hex.slice(1), 16), 1); g.fillCircle(16, -20, 5); }
 }
