@@ -13,6 +13,8 @@ const mockGraphics = {
   fillRect: vi.fn(),
   setVisible: vi.fn(),
   destroy: vi.fn(),
+  beginPath: vi.fn(),
+  strokePath: vi.fn(),
 };
 
 const mockSprite = {

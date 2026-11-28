@@ -85,6 +85,7 @@ export class PlacementGhost {
     let alpha = 0.7;
 
     this.graphics.lineStyle(3, arrowColor, alpha);
+    this.graphics.beginPath();
 
     let startX: number, startY: number, endX: number, endY: number;
 
@@ -154,6 +155,9 @@ export class PlacementGhost {
     this.graphics.lineTo(hx1, hy1);
     this.graphics.moveTo(endX, endY);
     this.graphics.lineTo(hx2, hy2);
+    
+    // Stroke the path to actually draw the lines
+    this.graphics.strokePath();
   }
 
   /**
@@ -378,6 +382,7 @@ export class ModeOverlay {
     const bottom = Math.ceil((camera.scrollY + camera.height / zoom) / TILE_SIZE);
 
     this.graphics.lineStyle(1, 0xFFFFFF, 0.15);
+    this.graphics.beginPath();
 
     // Draw vertical lines
     for (let x = left; x <= right; x++) {
@@ -392,6 +397,8 @@ export class ModeOverlay {
       this.graphics.moveTo(left * TILE_SIZE, py);
       this.graphics.lineTo(right * TILE_SIZE, py);
     }
+    
+    this.graphics.strokePath();
   }
 
   /**
@@ -406,6 +413,7 @@ export class ModeOverlay {
 
     // Red dashed frame - manually draw dashes
     this.graphics.lineStyle(2, 0xFF0000, 0.8);
+    this.graphics.beginPath();
 
     // Top edge
     for (let i = 0; i < size; i += 8) {
@@ -427,6 +435,8 @@ export class ModeOverlay {
       this.graphics.moveTo(px + size, py + i);
       this.graphics.lineTo(px + size, py + i + 4);
     }
+    
+    this.graphics.strokePath();
   }
 
   /**
