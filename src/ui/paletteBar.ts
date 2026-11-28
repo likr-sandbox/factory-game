@@ -3,6 +3,7 @@ import type { WorldState, BuildingType, RecipeId, MaterialId, Direction } from "
 import type { InputState } from "../game/input";
 import type { InspectorHandle } from "./inspector";
 import { isBuildingUnlocked } from "../sim/progression";
+import { drawBuilding } from "../game/sprites/buildings";
 
 export interface PaletteBarOptions {
   onBuildingSelect: (building: "miner" | "belt" | "splitter" | "filter_splitter" | "underground_belt" | "smelter" | "assembler" | "recycler" | "sensor") => void;
@@ -44,9 +45,34 @@ export function mountPaletteBar(container: HTMLElement, options: PaletteBarOptio
 
   for (const type of buildingTypes) {
     const btn = doc.createElement("button");
-    btn.textContent = BUILDING_LABELS[type] ?? type;
     btn.className = "palette-btn";
-    btn.style.cssText = "padding:4px 8px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px;font-family:'Segoe UI',sans-serif;white-space:nowrap";
+    btn.style.cssText = "display:flex;align-items:center;gap:6px;padding:6px 10px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px;font-family:'Segoe UI',sans-serif;white-space:nowrap";
+    
+    // Create canvas icon (32x32) with safe DOM stub handling
+    const canvas = doc.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    canvas.className = "palette-icon";
+    
+    // Draw building preview if canvas context is available
+    if (typeof (canvas as unknown as Record<string, unknown>).getContext === "function" || typeof HTMLCanvasElement !== "undefined") {
+      try {
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          drawBuilding(ctx, type, "E", 0, false);
+        }
+      } catch {
+        // Safe fallback: skip drawing in stub environments
+      }
+    }
+    
+    // Create label span
+    const label = doc.createElement("span");
+    label.className = "palette-label";
+    label.textContent = BUILDING_LABELS[type] ?? type;
+    
+    btn.appendChild(canvas);
+    btn.appendChild(label);
     btn.addEventListener("click", () => options.onBuildingSelect(type));
     buildingGroup.appendChild(btn);
     buildingButtons[type] = btn;

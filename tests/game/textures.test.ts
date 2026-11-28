@@ -10,43 +10,98 @@ import {
   getExpectedTextureCount,
 } from "../../src/game/textures";
 
-// Mock CanvasRenderingContext2D
-const mockContext = {
-  fillStyle: "",
-  fillRect: vi.fn(),
-  beginPath: vi.fn(),
-  moveTo: vi.fn(),
-  lineTo: vi.fn(),
-  closePath: vi.fn(),
-  fill: vi.fn(),
-  stroke: vi.fn(),
-  arc: vi.fn(),
-  quadraticCurveTo: vi.fn(),
-  bezierCurveTo: vi.fn(),
-  strokeRect: vi.fn(),
-  lineWidth: 1,
-  font: "",
-  fillText: vi.fn(),
-};
-
 // Simple mock canvas texture
 class MockCanvas {
   key: string;
   width: number;
   height: number;
+  private ctx: any;
 
   constructor(key: string, width: number, height: number) {
     this.key = key;
     this.width = width;
     this.height = height;
+    // Create context with reference to this canvas - include all common CanvasRenderingContext2D methods
+    this.ctx = {
+      fillStyle: "",
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      arc: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      bezierCurveTo: vi.fn(),
+      strokeRect: vi.fn(),
+      lineWidth: 1,
+      font: "",
+      fillText: vi.fn(),
+      clearRect: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      scale: vi.fn(),
+      setTransform: vi.fn(),
+      transform: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      measureText: vi.fn().mockReturnValue({ width: 0 }),
+      drawImage: vi.fn(),
+      getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(4 * 32 * 32) }),
+      putImageData: vi.fn(),
+      canvas: { width, height },
+    };
   }
 
   getContext(): any {
-    return mockContext;
+    return this.ctx;
   }
 
   refresh(): void {}
 }
+
+// Mock document.createElement for offscreen canvas usage
+vi.stubGlobal("document", {
+  createElement: vi.fn().mockReturnValue({
+    width: 32,
+    height: 32,
+    getContext: vi.fn().mockReturnValue({
+      fillStyle: "",
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      arc: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      bezierCurveTo: vi.fn(),
+      strokeRect: vi.fn(),
+      lineWidth: 1,
+      font: "",
+      fillText: vi.fn(),
+      clearRect: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      scale: vi.fn(),
+      setTransform: vi.fn(),
+      transform: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      measureText: vi.fn().mockReturnValue({ width: 0 }),
+      drawImage: vi.fn(),
+      getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(4 * 32 * 32) }),
+      putImageData: vi.fn(),
+      canvas: { width: 32, height: 32 },
+    }),
+  }),
+});
 
 // Mock texture manager that tracks created canvases
 class TestTextureManager {
@@ -98,15 +153,21 @@ describe("Texture Registration", () => {
     }
   });
 
-  it("should create 32x32 canvas textures", () => {
+  it("should create 64×64 canvas for hub and 32×32 for other buildings", () => {
     const scene = createMockScene();
     registerAllTextures(scene);
 
     const canvases = getCreatedCanvases(scene);
 
-    for (const canvas of canvases.values()) {
-      expect(canvas.width).toBe(32);
-      expect(canvas.height).toBe(32);
+    // Hub textures should be 64×64
+    for (const [key, canvas] of canvases.entries()) {
+      if (key.includes("hub")) {
+        expect(canvas.width).toBe(64);
+        expect(canvas.height).toBe(64);
+      } else {
+        expect(canvas.width).toBe(32);
+        expect(canvas.height).toBe(32);
+      }
     }
   });
 
@@ -210,7 +271,7 @@ describe("Texture Registration", () => {
   describe("Texture count helpers", () => {
     it("should calculate correct total count", () => {
       const count = getExpectedTextureCount();
-      // 3 terrain + 4 deposits + 160 buildings + 14 items = 181
+      // 3 terrain + 4 deposits + 160 buildings (hub is 64×64, others 32×32) + 14 items = 181
       expect(count).toBe(181);
     });
 

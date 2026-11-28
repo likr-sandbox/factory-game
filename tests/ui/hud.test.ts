@@ -118,7 +118,144 @@ describe("mountHud", () => {
     handle.destroy();
   });
 
-  it("should initialize 1x speed button with active class", () => {
+  it("should update SPM display when world changes", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const spmEl = container.children[0]!.children[0]!;
+    const w1 = makeWorld(); w1.deliveryHistory = [{ tick: 50, material: "iron_plate", amount: 10 }];
+    handle.update(w1);
+    const first = spmEl.textContent;
+    const w2 = makeWorld(); w2.tick = 999; w2.deliveryHistory = [{ tick: 950, material: "copper_plate", amount: 20 }];
+    handle.update(w2);
+    expect(spmEl.textContent).not.toBe(first);
+    expect(spmEl.textContent).toBe("SPM:20");
+    handle.destroy();
+  });
+
+  it("should cleanup on destroy", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    expect(container.children).toHaveLength(3); // hud-bar + tech-drawer + seed-popover
+    handle.destroy();
+    expect(container.children).toHaveLength(0);
+  });
+
+  it("should show default values when world has no data", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const empty: WorldState = { seed: 42, width: 10, height: 10, tick: 0, rngState: 42, tiles: [], buildings: {}, nextBuildingId: 1, hubOrigin: { x: 0, y: 0 }, delivered: {}, deliveryHistory: [], unlockedTechs: [], completedQuests: [], researchPoints: 0, tutorialPhase: 0, completedTutorialSteps: [], activeQuests: [], nextQuestId: 0 };
+    handle.update(empty);
+    expect(container.children[0]!.children[0]!.textContent).toBe("SPM:0");
+    const speedControls = container.children[0]!.children[1]!;
+    expect(speedControls.querySelectorAll(".speed-btn").length).toBe(4);
+    expect(container.children[0]!.children[2]!.textContent).toBe("稼働/故障：0 / 0");
+    expect(container.children[0]!.children[3]!.textContent).toBe("RP:0");
+    expect(container.children[0]!.children[4]!.textContent).toBe("チュートリアル：未開始");
+    expect(container.children[0]!.children[5]!.textContent).toBe("クエスト：なし");
+    handle.destroy();
+  });
+
+  it("should display research points correctly", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.researchPoints = 250;
+    handle.update(world);
+    expect(container.children[0]!.children[3]!.textContent).toBe("RP:250");
+    handle.destroy();
+  });
+
+  it("should display tutorial progress with current step", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.tutorialPhase = 1;
+    world.completedTutorialSteps = ["p1_manual_mining"];
+    handle.update(world);
+    expect(container.children[0]!.children[4]!.textContent).toContain("チュートリアル：Phase 1");
+    handle.destroy();
+  });
+
+  it("should display tech tree unlock buttons when techs are locked", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.unlockedTechs = []; // No techs unlocked
+    world.researchPoints = 1000; // Enough RP to unlock all
+    handle.update(world);
+    const techDrawer = container.children[1]!;
+    const buttons = techDrawer.querySelectorAll(".tech-btn");
+    expect(buttons.length).toBeGreaterThan(0);
+    handle.destroy();
+  });
+
+  it("should call onUnlockTech callback when tech button clicked", () => {
+    const onUnlockTech = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onUnlockTech });
+    const world = makeWorld();
+    world.unlockedTechs = [];
+    handle.update(world);
+    const techTreeEl = container.children[0]!.children[6]!;
+    const buttons = techTreeEl.querySelectorAll(".tech-btn");
+    if (buttons.length > 0) {
+      buttons[0]!.dispatchEvent("click");
+      expect(onUnlockTech).toHaveBeenCalled();
+    }
+    handle.destroy();
+  });
+
+  it("should display active quests with progress", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    world.tick = 1000;
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 10 },
+        startedAtTick: 500,
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 15 },
+        rewardPoints: 50,
+      } as ActiveQuestState,
+    ];
+    handle.update(world);
+    expect(container.children[0]!.children[5]!.textContent).toContain("クエスト");
+    handle.destroy();
+  });
+
+  it("should display seed reset controls", () => {
+    const handle = mountHud(container as unknown as HTMLElement);
+    const world = makeWorld();
+    handle.update(world);
+    const seedPopoverEl = container.children[2]!;
+    const seedInput = seedPopoverEl.children[0]!;
+    const resetBtn = seedPopoverEl.children[1]!;
+    const randomBtn = seedPopoverEl.children[2]!;
+    expect(seedInput.className).toContain("seed-input");
+    expect(resetBtn.className).toContain("reset-btn");
+    expect(randomBtn.className).toContain("random-btn");
+    handle.destroy();
+  });
+
+  it("should call onResetWorld callback when reset button clicked", () => {
+    const onResetWorld = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onResetWorld });
+    const world = makeWorld();
+    handle.update(world);
+    const seedPopoverEl = container.children[2]!;
+    const resetBtn = seedPopoverEl.children[1]!;
+    resetBtn.dispatchEvent("click");
+    handle.destroy();
+  });
+
+  it("should call onResetWorld with random seed when random button clicked", () => {
+    const onResetWorld = vi.fn();
+    const handle = mountHud(container as unknown as HTMLElement, { onResetWorld });
+    const world = makeWorld();
+    handle.update(world);
+    const seedPopoverEl = container.children[2]!;
+    const randomBtn = seedPopoverEl.children[2]!;
+    randomBtn.dispatchEvent("click");
+    expect(onResetWorld).toHaveBeenCalled();
+    handle.destroy();
+  });
+
+  it("should initialize 1x speed button with active class on mount", () => {
     const handle = mountHud(container as unknown as HTMLElement);
     const speedControlsEl = container.children[0]!.children[1]!;
     const buttons = speedControlsEl.querySelectorAll(".speed-btn");
@@ -138,7 +275,7 @@ describe("mountHud", () => {
     expect(techToggleBtn.textContent).toContain("研究");
     
     // Tech drawer should be hidden by default
-    const techDrawer = container.children[1]!;
+    const techDrawer = container.children[1]!;  // tech-drawer popover
     expect(techDrawer.style.display).toBe("none");
     expect(techToggleBtn.ariaExpanded).toBe("false");
     
@@ -226,7 +363,7 @@ describe("mountHud", () => {
     
     // First update with no techs unlocked
     handle.update(world);
-    const techDrawer = container.children[1]!;
+    const techDrawer = container.children[1]!;  // tech-drawer popover
     const buttonsBefore = techDrawer.querySelectorAll(".tech-btn");
     expect(buttonsBefore.length).toBe(8);
     
@@ -245,10 +382,23 @@ describe("mountHud", () => {
     const onUnlockTech = vi.fn();
     const handle = mountHud(container as unknown as HTMLElement, { onUnlockTech });
     const world = makeWorld();
+    world.tick = 1000;
     world.unlockedTechs = [];
+    // Note: Quest templates use targets like iron_plate: 15, copper_plate: 15
+    world.activeQuests = [
+      {
+        questId: "quest_0",
+        stepIndex: 0,
+        progress: { iron_plate: 5, copper_plate: 3 },
+        startedAtTick: 500,
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 15, copper_plate: 15 },
+        rewardPoints: 50,
+      } as ActiveQuestState,
+    ];
     handle.update(world);
     
-    const techDrawer = container.children[1]!;
+    const techDrawer = container.children[1]!;  // tech-drawer popover
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     if (buttons.length > 0) {
       buttons[0]!.dispatchEvent("click");
@@ -263,7 +413,7 @@ describe("mountHud", () => {
     world.researchPoints = 50; // Less than filter_splitter cost (100)
     handle.update(world);
     
-    const techDrawer = container.children[1]!;
+    const techDrawer = container.children[1]!;  // tech-drawer popover
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     
     const filterSplitterBtn = Array.from(buttons).find((b: any) => b.textContent?.includes("フィルター分配機"));
@@ -297,8 +447,9 @@ describe("mountHud", () => {
     const world = makeWorld();
     handle.update(world);
     
-    const seedToggleBtn = container.children[0]!.children[7]!;
-    const techToggleBtn = container.children[0]!.children[6]!;
+    const hud = container.children[0]!;
+    const seedToggleBtn = hud.children[7]!;
+    const techToggleBtn = hud.children[6]!;
     const seedPopover = container.children[2]!;
     const techDrawer = container.children[1]!;
     
@@ -319,8 +470,9 @@ describe("mountHud", () => {
     const world = makeWorld();
     handle.update(world);
     
-    const seedToggleBtn = container.children[0]!.children[7]!;
-    const techToggleBtn = container.children[0]!.children[6]!;
+    const hud = container.children[0]!;
+    const seedToggleBtn = hud.children[7]!;
+    const techToggleBtn = hud.children[6]!;
     const seedPopover = container.children[2]!;
     const techDrawer = container.children[1]!;
     
@@ -382,6 +534,9 @@ describe("mountHud", () => {
         stepIndex: 0,
         progress: { iron_plate: 5 },
         startedAtTick: 500,
+        questCatalogId: "iron_plate",
+        targets: { iron_plate: 15 },
+        rewardPoints: 50,
       } as ActiveQuestState,
     ];
     handle.update(world);
@@ -418,7 +573,7 @@ describe("mountHud", () => {
     world.researchPoints = 1000;
     handle.update(world);
     
-    const techDrawer = container.children[1]!;
+    const techDrawer = container.children[1]!;  // tech-drawer popover
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     expect(buttons.length).toBe(8);
     
@@ -431,7 +586,7 @@ describe("mountHud", () => {
     world.researchPoints = 1000;
     handle.update(world);
     
-    const techDrawer = container.children[1]!;
+    const techDrawer = container.children[1]!;  // tech-drawer popover
     const buttons = techDrawer.querySelectorAll(".tech-btn");
     const texts = buttons.map(b => b.textContent);
     
