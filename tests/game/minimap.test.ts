@@ -554,21 +554,21 @@ describe("Minimap Destroy", () => {
 describe("Minimap Palette Integration", () => {
   it("should use TERRAIN_PALETTE colors for terrain rendering", () => {
     const expectedColors = Object.values(TERRAIN_PALETTE).map((p) => p.hex);
-    expect(expectedColors).toContain("#4A7C3E"); // grass
-    expect(expectedColors).toContain("#808080"); // rock
-    expect(expectedColors).toContain("#1E90FF"); // water
+    expect(expectedColors).toContain("#3F6238"); // grass
+    expect(expectedColors).toContain("#5A6068"); // rock
+    expect(expectedColors).toContain("#245B7A"); // water
   });
 
   it("should use DEPOSIT_PALETTE colors for deposit rendering", () => {
-    expect(DEPOSIT_PALETTE.iron_ore.hex).toBe("#5D737E");
-    expect(DEPOSIT_PALETTE.copper_ore.hex).toBe("#D2691E");
-    expect(DEPOSIT_PALETTE.coal.hex).toBe("#222629");
-    expect(DEPOSIT_PALETTE.silica_sand.hex).toBe("#E8D9A0");
+    expect(DEPOSIT_PALETTE.iron_ore.hex).toBe("#4A5F6F");
+    expect(DEPOSIT_PALETTE.copper_ore.hex).toBe("#B85C38");
+    expect(DEPOSIT_PALETTE.coal.hex).toBe("#1C1F24");
+    expect(DEPOSIT_PALETTE.silica_sand.hex).toBe("#E5D4A8");
   });
 
   it("should use BUILDING_PALETTE colors for building rendering", () => {
-    expect(BUILDING_PALETTE.miner.hex).toBe("#4169E1");
-    expect(BUILDING_PALETTE.hub.hex).toBe("#FF4500");
+    expect(BUILDING_PALETTE.miner.hex).toBe("#3B5998");
+    expect(BUILDING_PALETTE.hub.hex).toBe("#8B0000");
   });
 });
 
