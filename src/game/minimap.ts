@@ -23,10 +23,19 @@ export const CAMERA_VIEW_TILES_Y = 18;
 // Options Type
 // ============================================================================
 
+export interface CameraViewport {
+  /** Top-left tile coordinates of camera view */
+  left: number;
+  top: number;
+  /** Width and height in tiles */
+  width: number;
+  height: number;
+}
+
 export interface MinimapOptions {
   /** Callback when user navigates to a tile (click/drag) */
   onNavigate?: (tileX: number, tileY: number) => void;
-  /** Current camera position (top-left tile coordinates) */
+  /** Current camera position (top-left tile coordinates) - deprecated, use cameraViewport */
   cameraX?: number;
   cameraY?: number;
   /** Whether minimap is visible */
@@ -155,10 +164,12 @@ function drawHub(
 function drawCameraView(
   ctx: CanvasRenderingContext2D,
   cameraX: number,
-  cameraY: number
+  cameraY: number,
+  viewWidthTiles: number,
+  viewHeightTiles: number
 ): void {
-  const viewWidthPx = CAMERA_VIEW_TILES_X * TILE_SCALE;
-  const viewHeightPx = CAMERA_VIEW_TILES_Y * TILE_SCALE;
+  const viewWidthPx = viewWidthTiles * TILE_SCALE;
+  const viewHeightPx = viewHeightTiles * TILE_SCALE;
   
   ctx.strokeStyle = "#00FF00";
   ctx.lineWidth = 1;
@@ -191,7 +202,7 @@ function drawPlayerMarker(
 // ============================================================================
 
 /** Render the entire minimap */
-function renderMinimap(state: MinimapState): void {
+function renderMinimap(state: MinimapState, cameraViewport?: CameraViewport): void {
   const ctx = state.canvas.getContext("2d");
   if (!ctx || !state.world) return;
 
@@ -229,15 +240,31 @@ function renderMinimap(state: MinimapState): void {
   // Draw hub
   drawHub(ctx, state.world.hubOrigin.x, state.world.hubOrigin.y);
 
-  // Draw camera view rectangle if camera position is set
-  if (state.options.cameraX !== undefined && state.options.cameraY !== undefined) {
-    drawCameraView(ctx, state.options.cameraX, state.options.cameraY);
+  // Draw camera view rectangle - use provided viewport or fallback to options
+  let camLeft: number, camTop: number, camWidth: number, camHeight: number;
+  
+  if (cameraViewport) {
+    camLeft = cameraViewport.left;
+    camTop = cameraViewport.top;
+    camWidth = cameraViewport.width;
+    camHeight = cameraViewport.height;
+  } else if (state.options.cameraX !== undefined && state.options.cameraY !== undefined) {
+    // Fallback to deprecated cameraX/cameraY
+    camLeft = state.options.cameraX;
+    camTop = state.options.cameraY;
+    camWidth = CAMERA_VIEW_TILES_X;
+    camHeight = CAMERA_VIEW_TILES_Y;
+  } else {
+    // No camera position specified
+    camLeft = camTop = camWidth = camHeight = 0;
   }
-
-  // Draw player marker at center of camera view
-  if (state.options.cameraX !== undefined && state.options.cameraY !== undefined) {
-    const playerX = state.options.cameraX + Math.floor(CAMERA_VIEW_TILES_X / 2);
-    const playerY = state.options.cameraY + Math.floor(CAMERA_VIEW_TILES_Y / 2);
+  
+  if (camWidth > 0 && camHeight > 0) {
+    drawCameraView(ctx, camLeft, camTop, camWidth, camHeight);
+    
+    // Draw player marker at center of camera view
+    const playerX = camLeft + Math.floor(camWidth / 2);
+    const playerY = camTop + Math.floor(camHeight / 2);
     drawPlayerMarker(ctx, playerX, playerY);
   }
 }
@@ -341,12 +368,12 @@ export function mountMinimap(
   
   const handleMouseDown = (event: Event) => {
     const mouseEvent = event as MouseEvent;
-    if (mouseEvent.target === canvas) {
+    if (mouseEvent.target === canvas && currentMinimap) {
       isMouseDown = true;
       dragState.isDragging = true;
       dragState.lastX = mouseEvent.clientX;
       dragState.lastY = mouseEvent.clientY;
-      handleClick({ canvas, container, toggleButton, options, world: null, isVisible }, mouseEvent);
+      handleClick(currentMinimap, mouseEvent);
     }
   };
   
@@ -357,8 +384,8 @@ export function mountMinimap(
   
   const handleMouseMove = (event: Event) => {
     const mouseEvent = event as MouseEvent;
-    if (isMouseDown && mouseEvent.target === canvas) {
-      handleDrag({ canvas, container, toggleButton, options, world: null, isVisible }, mouseEvent);
+    if (isMouseDown && mouseEvent.target === canvas && currentMinimap) {
+      handleDrag(currentMinimap, mouseEvent);
     }
   };
   
@@ -370,10 +397,10 @@ export function mountMinimap(
     window.addEventListener("mousemove", handleMouseMove);
   }
   
-  // Toggle button handler
+  // Toggle button handler - only hide/show canvas, not the entire container
   const handleToggle = () => {
     isVisible = !isVisible;
-    minimapContainer.style.display = isVisible ? "block" : "none";
+    canvas.style.display = isVisible ? "block" : "none";
   };
   toggleButton.addEventListener("click", handleToggle);
   
@@ -388,11 +415,11 @@ export function mountMinimap(
   };
   
   return {
-    /** Update minimap with new world state */
-    update(world: WorldState): void {
+    /** Update minimap with new world state and optional camera viewport */
+    update(world: WorldState, cameraViewport?: CameraViewport): void {
       if (!currentMinimap) return;
       currentMinimap.world = world;
-      renderMinimap(currentMinimap);
+      renderMinimap(currentMinimap, cameraViewport);
     },
     
     /** Destroy minimap and clean up event listeners */
@@ -413,7 +440,7 @@ export function mountMinimap(
     /** Set minimap visibility */
     setVisible(visible: boolean): void {
       isVisible = visible;
-      minimapContainer.style.display = visible ? "block" : "none";
+      canvas.style.display = visible ? "block" : "none";
     },
   };
 }
