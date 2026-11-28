@@ -3,10 +3,11 @@
 
 import type { WorldState, BuildingState, Direction, MaterialId, BeltItem } from "./types";
 import { directionDelta, inBounds, getTile } from "./world";
+import { MAX_OUTPUT_BUFFER } from "./catalog";
+import { canAcceptItem, canAcceptBeltItem, addToBuffer, countBufferItems, transferItem } from "./buffers";
 
 const OVERLOAD_THRESHOLD = 100;
 const UNDERGROUND_RANGE = 4;
-const MAX_OUTPUT_BUFFER = 10;
 const RECYCLABLE_MATERIALS: MaterialId[] = ["slag"];
 const HARMLESS_DISPOSAL_MATERIALS: MaterialId[] = ["slag"];
 
@@ -80,13 +81,13 @@ export function processUndergroundBelts(world: WorldState): void {
             // Also transfer inputBuffer items (underground belts skip this in pushOutputToBuilding)
             for (const [materialStr, amount] of Object.entries(building.inputBuffer)) {
               if ((amount || 0) <= 0) continue;
-              transferItem(building.inputBuffer, forwardBuilding, materialStr as MaterialId, amount!);
+              transferItem(building.inputBuffer, forwardBuilding, materialStr as MaterialId, amount!, world.tick);
             }
             // Also transfer belt items if the forward building is a belt
             if (forwardBuilding.type === "belt") {
               for (const item of building.beltItems) {
                 if (forwardBuilding.beltItems.length < 3) {
-                  forwardBuilding.beltItems.push({ ...item });
+                  forwardBuilding.beltItems.push({ ...item, movedAtTick: world.tick });
                 }
               }
               building.beltItems = [];
@@ -105,7 +106,7 @@ function transferUndergroundItems(world: WorldState, source: BuildingState, targ
   // Transfer from source.inputBuffer to target's inputBuffer
   for (const [materialStr, amount] of Object.entries(source.inputBuffer)) {
     if ((amount || 0) <= 0) continue;
-    const transferredAmount = transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!);
+    const transferredAmount = transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!, world.tick);
     if (transferredAmount > 0) transferred = true;
   }
   
@@ -122,7 +123,7 @@ function transferUndergroundItems(world: WorldState, source: BuildingState, targ
     const idx = source.beltItems.indexOf(item);
     if (idx !== -1) {
       source.beltItems.splice(idx, 1);
-      target.beltItems.push({ ...item });
+      target.beltItems.push({ ...item, movedAtTick: world.tick });
       transferred = true;
     }
   }
@@ -262,13 +263,6 @@ export function updateReliabilityAndOverload(world: WorldState): void {
 }
 
 // Helper functions
-function addToBuffer(buffer: Partial<Record<MaterialId, number>>, material: MaterialId, amount: number): void {
-  buffer[material] = (buffer[material] || 0) + amount;
-}
-
-function countBufferItems(buffer: Partial<Record<MaterialId, number>>): number {
-  return Object.values(buffer).reduce((sum, val) => sum + (val || 0), 0);
-}
 
 function trySendToBuilding(world: WorldState, source: BuildingState, material: MaterialId, amount: number, dir: Direction): boolean {
   const { dx, dy } = directionDelta(dir);
@@ -281,58 +275,24 @@ function trySendToBuilding(world: WorldState, source: BuildingState, material: M
   if (!targetBuilding) return false;
 
   if (canAcceptItem(targetBuilding, material)) {
-    const transferred = transferItem(source.inputBuffer, targetBuilding, material, amount);
+    const transferred = transferItem(source.inputBuffer, targetBuilding, material, amount, world.tick);
     return transferred > 0;
   }
   return false;
-}
-
-function canAcceptItem(building: BuildingState, material: MaterialId): boolean {
-  switch (building.type) {
-    case "belt": return building.beltItems.length < 3;
-    case "splitter": case "filter_splitter": case "smelter": case "assembler": case "recycler": case "hub": case "underground_belt":
-      return countBufferItems(building.inputBuffer) < MAX_OUTPUT_BUFFER;
-    default: return false;
-  }
-}
-
-function canAcceptBeltItem(building: BuildingState, material: MaterialId): boolean {
-  return canAcceptItem(building, material);
-}
-
-function transferItem(sourceBuffer: Partial<Record<MaterialId, number>>, targetBuilding: BuildingState, material: MaterialId, maxAmount: number): number {
-  const available = sourceBuffer[material] || 0;
-  if (available <= 0) return 0;
-
-  let accepted = 0;
-  switch (targetBuilding.type) {
-    case "belt":
-      accepted = Math.min(available, maxAmount, 3 - targetBuilding.beltItems.length);
-      for (let i = 0; i < accepted; i++) targetBuilding.beltItems.push({ material, movedAtTick: 0 });
-      break;
-    case "splitter": case "filter_splitter": case "smelter": case "assembler": case "recycler": case "hub": case "underground_belt":
-      const space = MAX_OUTPUT_BUFFER - countBufferItems(targetBuilding.inputBuffer);
-      accepted = Math.min(available, maxAmount, space);
-      addToBuffer(targetBuilding.inputBuffer, material, accepted);
-      break;
-    default: return 0;
-  }
-  sourceBuffer[material] = available - accepted;
-  return accepted;
 }
 
 function pushOutputToBuilding(world: WorldState, source: BuildingState, target: BuildingState): void {
   // Transfer from outputBuffer
   for (const [materialStr, amount] of Object.entries(source.outputBuffer)) {
     if ((amount || 0) <= 0) continue;
-    transferItem(source.outputBuffer, target, materialStr as MaterialId, amount!);
+    transferItem(source.outputBuffer, target, materialStr as MaterialId, amount!, world.tick);
   }
   // Also transfer from inputBuffer (for standalone underground belts and other buildings)
   // But NOT for paired underground belts - they keep items in inputBuffer until processed
   if (source.type !== "underground_belt") {
     for (const [materialStr, amount] of Object.entries(source.inputBuffer)) {
       if ((amount || 0) <= 0) continue;
-      transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!);
+      transferItem(source.inputBuffer, target, materialStr as MaterialId, amount!, world.tick);
     }
   }
 }
