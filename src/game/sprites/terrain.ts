@@ -1,33 +1,39 @@
 // Procedural 32x32 terrain and ore deposit sprite drawers
-// Pure CanvasRenderingContext2D pixel drawing using palette colors only
-
 import type { TerrainType, MaterialId } from "../../sim/types";
 import { getTerrainColor, getDepositColor, SHADING_PALETTE } from "../palette";
 
-// ============================================================================
-// Texture Key Helpers (deterministic)
-// ============================================================================
+export type DepositStage = "rich" | "medium" | "low" | "depleted";
+export const DEPOSIT_STAGES: DepositStage[] = ["rich", "medium", "low", "depleted"] as const;
+export const TERRAIN_VARIANT_COUNTS: Record<TerrainType, number> = { grass: 5, rock: 4, water: 3 };
 
-/** Generate deterministic texture key for terrain variations */
+export function getTerrainVariant(x: number, y: number, worldSeed: number, terrain: TerrainType): number {
+  const combined = x * 73856093 ^ y * 19349663 ^ worldSeed * 83492791;
+  const hash = Math.sin(combined) * 43758.5453;
+  const variant = Math.floor((hash - Math.floor(hash)) * TERRAIN_VARIANT_COUNTS[terrain]);
+  return Math.max(0, Math.min(variant, TERRAIN_VARIANT_COUNTS[terrain] - 1));
+}
+
+export function getDepositStage(remaining: number, initialAmount: number): DepositStage {
+  if (initialAmount <= 0 || remaining <= 0) return "depleted";
+  const ratio = remaining / initialAmount;
+  if (ratio > 0.66) return "rich";
+  if (ratio > 0.33) return "medium";
+  return "low";
+}
+
 export function getTerrainTextureKey(terrain: TerrainType, seed: number = 0): string {
   return `terrain:${terrain}:seed:${seed}`;
 }
 
-/** Generate deterministic texture key for deposit variations */
-export function getDepositTextureKey(deposit: MaterialId, seed: number = 0): string {
-  return `deposit:${deposit}:seed:${seed}`;
+export function getDepositTextureKey(deposit: MaterialId, seed: number = 0, stage: DepositStage = "rich"): string {
+  return `deposit:${deposit}:seed:${seed}:stage:${stage}`;
 }
-
-// ============================================================================
-// Pseudo-random helper for deterministic texture generation
-// ============================================================================
 
 function seededRandom(seed: number, x: number, y: number): number {
   const n = Math.sin(seed * 12.9898 + x * 57.234 + y * 31.456) * 43758.5453;
   return n - Math.floor(n);
 }
 
-/** Safely parse RGB values from css "rgb(r,g,b)" string */
 function rgbFromCss(css: string): [number, number, number] {
   const match = css.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (match && match[1] !== undefined && match[2] !== undefined && match[3] !== undefined) {
@@ -36,294 +42,119 @@ function rgbFromCss(css: string): [number, number, number] {
   return [128, 128, 128];
 }
 
-// ============================================================================
-// Base Terrain Drawing Functions
-// ============================================================================
-
-/** Draw base terrain color with subtle noise variation */
-function drawBaseTerrain(
-  ctx: CanvasRenderingContext2D,
-  terrain: TerrainType,
-  seed: number = 0
-): void {
-  const baseColor = getTerrainColor(terrain);
-  const baseRgb = rgbFromCss(baseColor.css);
-  
-  // Draw full 32x32 rectangle with soft per-pixel variation (reduced noise)
+function drawBaseTerrain(ctx: CanvasRenderingContext2D, terrain: TerrainType, seed: number = 0): void {
+  const baseRgb = rgbFromCss(getTerrainColor(terrain).css);
   for (let y = 0; y < 32; y++) {
     for (let x = 0; x < 32; x++) {
-      const variation = (seededRandom(seed, x, y) - 0.5) * 0.05;
-      const r = Math.min(255, Math.max(0, Math.round(baseRgb[0] * (1 + variation))));
-      const g = Math.min(255, Math.max(0, Math.round(baseRgb[1] * (1 + variation))));
-      const b = Math.min(255, Math.max(0, Math.round(baseRgb[2] * (1 + variation))));
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const v = (seededRandom(seed, x, y) - 0.5) * 0.05;
+      ctx.fillStyle = `rgb(${Math.round(baseRgb[0] * (1 + v))},${Math.round(baseRgb[1] * (1 + v))},${Math.round(baseRgb[2] * (1 + v))})`;
       ctx.fillRect(x, y, 1, 1);
     }
   }
 }
 
-/** Draw grass texture with blade-like patterns */
-export function drawGrassTile(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  drawBaseTerrain(ctx, "grass", seed);
-  
-  // Add softer darker green blade accents (reduced contrast for calmness)
-  const rgb = rgbFromCss(getTerrainColor("grass").css);
-  const darkR = Math.round(rgb[0] * 0.85);
-  const darkG = Math.round(rgb[1] * 0.85);
-  const darkB = Math.round(rgb[2] * 0.85);
-  
-  ctx.fillStyle = `rgb(${darkR},${darkG},${darkB})`;
-  
-  // Draw fewer, softer blade patterns (reduced from 40 to 25)
-  for (let i = 0; i < 25; i++) {
-    const bx = Math.floor(seededRandom(seed + i, 0, 0) * 30);
-    const by = Math.floor(seededRandom(seed + i + 100, 0, 0) * 30);
-    const height = 2 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 3);
-    ctx.fillRect(bx, by, 1, height);
-  }
-}
-
-/** Draw rock texture with speckled pattern */
-export function drawRockTile(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  drawBaseTerrain(ctx, "rock", seed);
-  
-  // Add darker and lighter rock speckles
-  const baseRgb = rgbFromCss(getTerrainColor("rock").css);
-  
-  // Darker speckles
-  ctx.fillStyle = `rgb(${Math.round(baseRgb[0] * 0.6)},${Math.round(baseRgb[1] * 0.6)},${Math.round(baseRgb[2] * 0.6)})`;
-  for (let i = 0; i < 50; i++) {
-    const x = Math.floor(seededRandom(seed + i, 0, 0) * 32);
-    const y = Math.floor(seededRandom(seed + i + 100, 0, 0) * 32);
-    ctx.fillRect(x, y, 1, 1);
-  }
-  
-  // Lighter speckles
-  ctx.fillStyle = `rgb(${Math.round(baseRgb[0] * 1.3)},${Math.round(baseRgb[1] * 1.3)},${Math.round(baseRgb[2] * 1.3)})`;
-  for (let i = 0; i < 30; i++) {
-    const x = Math.floor(seededRandom(seed + i + 200, 0, 0) * 32);
-    const y = Math.floor(seededRandom(seed + i + 300, 0, 0) * 32);
-    ctx.fillRect(x, y, 1, 1);
-  }
-}
-
-/** Draw water texture with ripple effect */
-export function drawWaterTile(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  drawBaseTerrain(ctx, "water", seed);
-  
-  // Add lighter ripple highlights
-  const baseRgb = rgbFromCss(getTerrainColor("water").css);
-  const lightR = Math.min(255, baseRgb[0] + 60);
-  const lightG = Math.min(255, baseRgb[1] + 60);
-  const lightB = Math.min(255, baseRgb[2] + 30);
-  
-  ctx.fillStyle = `rgba(${lightR},${lightG},${lightB},0.5)`;
-  
-  // Draw horizontal ripple lines
-  for (let row = 0; row < 32; row += 4) {
-    const offset = Math.floor(seededRandom(seed + row, 0, 0) * 3);
-    for (let col = offset; col < 32; col += 6) {
-      ctx.fillRect(col, row, 2, 1);
-    }
-  }
-}
-
-// ============================================================================
-// Ore Deposit Drawing Functions
-// ============================================================================
-
-/** Draw a single mineral chunk with outline using SHADING_PALETTE */
-function drawMineralChunk(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  baseRgb: [number, number, number],
-  outlineRgb: [number, number, number]
-): void {
-  // Draw outline first using SHADING_PALETTE.outline for consistency
+function drawMineralChunk(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, baseRgb: [number, number, number]): void {
   ctx.fillStyle = SHADING_PALETTE.outline.css;
-  for (let oy = -1; oy <= size; oy++) {
-    for (let ox = -1; ox <= size; ox++) {
-      if (ox === -1 || ox === size || oy === -1 || oy === size) {
-        ctx.fillRect(x + ox, y + oy, 1, 1);
-      }
-    }
+  for (let oy = -1; oy <= size; oy++) for (let ox = -1; ox <= size; ox++) {
+    if (ox === -1 || ox === size || oy === -1 || oy === size) ctx.fillRect(x + ox, y + oy, 1, 1);
   }
-  
-  // Draw inner chunk
   ctx.fillStyle = `rgb(${baseRgb[0]},${baseRgb[1]},${baseRgb[2]})`;
   ctx.fillRect(x + 1, y + 1, Math.max(1, size - 1), Math.max(1, size - 1));
 }
 
-/** Draw iron ore deposit with cool steel-blue large angular chunks */
-export function drawIronOreDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  const depositColor = getDepositColor("iron_ore");
-  const rgb = rgbFromCss(depositColor.css);
-  
-  // Iron ore: fewer but larger angular chunks (3-4px)
-  const clusterCount = 12;
-  
-  for (let i = 0; i < clusterCount; i++) {
-    const cx = Math.floor(seededRandom(seed + i * 7, 0, 0) * 24) + 4;
-    const cy = Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 24) + 4;
-    const size = 2 + Math.floor(seededRandom(seed + i * 7 + 200, 0, 0) * 3);  // 2-4px
-    
-    drawMineralChunk(ctx, cx, cy, size, rgb, [0, 0, 0]);
-    
-    // Add subtle highlight using SHADING_PALETTE.highlight
-    if (seededRandom(seed + i * 7 + 300, 0, 0) > 0.6) {
-      ctx.fillStyle = SHADING_PALETTE.highlight.css;
-      ctx.fillRect(cx + 1, cy + 1, 1, 1);
-    }
-  }
-}
-
-/** Draw copper ore deposit with warm bright copper-orange irregular chunks */
-export function drawCopperOreDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  const depositColor = getDepositColor("copper_ore");
-  const rgb = rgbFromCss(depositColor.css);
-  
-  // Copper ore: medium-sized irregular chunks (2-3px), slightly more numerous
-  const clusterCount = 16;
-  
-  for (let i = 0; i < clusterCount; i++) {
-    const cx = Math.floor(seededRandom(seed + i * 5, 0, 0) * 26) + 3;
-    const cy = Math.floor(seededRandom(seed + i * 5 + 100, 0, 0) * 26) + 3;
-    const size = 1 + Math.floor(seededRandom(seed + i * 5 + 200, 0, 0) * 3);  // 1-3px
-    
-    drawMineralChunk(ctx, cx, cy, size, rgb, [0, 0, 0]);
-    
-    // Add highlight using SHADING_PALETTE.highlight
-    if (seededRandom(seed + i * 5 + 300, 0, 0) > 0.5) {
-      ctx.fillStyle = SHADING_PALETTE.highlight.css;
-      ctx.fillRect(cx + 1, cy, 1, 1);
-    }
-  }
-}
-
-/** Draw coal deposit with deep charcoal/black rounded chunks */
-export function drawCoalDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  const depositColor = getDepositColor("coal");
-  const rgb = rgbFromCss(depositColor.css);
-  
-  // Ensure all channels stay < 100 for coal (dark constraint)
-  const darkRgb: [number, number, number] = [
-    Math.min(rgb[0], 99),
-    Math.min(rgb[1], 99),
-    Math.min(rgb[2], 99)
+export function drawGrassTile(ctx: CanvasRenderingContext2D, seed: number = 0): void {
+  drawBaseTerrain(ctx, "grass", seed);
+  const variant = getTerrainVariant(0, 0, seed, "grass");
+  const rgb = rgbFromCss(getTerrainColor("grass").css);
+  const colors: [number, number, number][] = [
+    [0.85, 0.85, 0.85], [0.9, 0.9, 0.9], [0.7, 0.6, 0.5], [0.8, 0.75, 0.7], [1.15, 1.2, 1.1]
   ];
-  
-  // Coal: small rounded chunks (1-2px), dense clustering
-  const clusterCount = 20;
-  
-  for (let i = 0; i < clusterCount; i++) {
-    const cx = Math.floor(seededRandom(seed + i * 4, 0, 0) * 28) + 2;
-    const cy = Math.floor(seededRandom(seed + i * 4 + 100, 0, 0) * 28) + 2;
-    const size = 1 + Math.floor(seededRandom(seed + i * 4 + 200, 0, 0) * 2);  // 1-2px
-    
-    drawMineralChunk(ctx, cx, cy, size, darkRgb, [0, 0, 0]);
-    
-    // Coal has minimal highlights (mostly dark) - use SHADING_PALETTE.shadow
-    if (seededRandom(seed + i * 4 + 300, 0, 0) > 0.7) {
-      ctx.fillStyle = SHADING_PALETTE.shadow.css;
-      ctx.fillRect(cx + 1, cy + 1, 1, 1);
-    }
-  }
+  const c = colors[variant]!;
+  ctx.fillStyle = `rgb(${Math.round(rgb[0] * c[0])},${Math.round(rgb[1] * c[1])},${Math.round(rgb[2] * c[2])})`;
+  if (variant === 0) for (let i = 0; i < 25; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 30), Math.floor(seededRandom(seed + i + 100, 0, 0) * 30), 1, 2 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 3));
+  else if (variant === 1) for (let i = 0; i < 15; i++) { const t = Math.floor(seededRandom(seed + i, 0, 0) * 28) + 2; ctx.fillRect(t, Math.floor(seededRandom(seed + i + 100, 0, 0) * 28) + 2, 2, 1); }
+  else if (variant === 2) for (let i = 0; i < 8; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 24) + 4, Math.floor(seededRandom(seed + i + 100, 0, 0) * 24) + 4, 3, 2);
+  else if (variant === 3) for (let i = 0; i < 20; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 30), Math.floor(seededRandom(seed + i + 100, 0, 0) * 30), 2, 2);
+  else for (let i = 0; i < 18; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 30), Math.floor(seededRandom(seed + i + 100, 0, 0) * 30), 1, 1);
 }
 
-/** Draw silica sand deposit with pale warm sand beige granular chunks */
-export function drawSilicaSandDeposit(ctx: CanvasRenderingContext2D, seed: number = 0): void {
-  const depositColor = getDepositColor("silica_sand");
-  const rgb = rgbFromCss(depositColor.css);
-  
-  // Ensure all channels stay > 150 for silica sand (light constraint)
-  const lightRgb: [number, number, number] = [
-    Math.max(rgb[0], 151),
-    Math.max(rgb[1], 151),
-    Math.max(rgb[2], 151)
-  ];
-  
-  // Silica sand: small granular chunks (1-2px), scattered pattern
-  const clusterCount = 18;
-  
-  for (let i = 0; i < clusterCount; i++) {
-    const cx = Math.floor(seededRandom(seed + i * 6, 0, 0) * 28) + 2;
-    const cy = Math.floor(seededRandom(seed + i * 6 + 100, 0, 0) * 28) + 2;
-    const size = 1 + Math.floor(seededRandom(seed + i * 6 + 200, 0, 0) * 2);  // 1-2px
-    
-    drawMineralChunk(ctx, cx, cy, size, lightRgb, [0, 0, 0]);
-    
-    // Add soft highlight using SHADING_PALETTE.highlight
-    if (seededRandom(seed + i * 6 + 300, 0, 0) > 0.5) {
-      ctx.fillStyle = SHADING_PALETTE.highlight.css;
-      ctx.fillRect(cx, cy + 1, 1, 1);
-    }
-  }
+export function drawRockTile(ctx: CanvasRenderingContext2D, seed: number = 0): void {
+  drawBaseTerrain(ctx, "rock", seed);
+  const variant = getTerrainVariant(0, 0, seed, "rock");
+  const baseRgb = rgbFromCss(getTerrainColor("rock").css);
+  if (variant === 0) {
+    ctx.fillStyle = `rgb(${Math.round(baseRgb[0] * 0.6)},${Math.round(baseRgb[1] * 0.6)},${Math.round(baseRgb[2] * 0.6)})`;
+    for (let i = 0; i < 50; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 32), Math.floor(seededRandom(seed + i + 100, 0, 0) * 32), 1, 1);
+    ctx.fillStyle = `rgb(${Math.round(baseRgb[0] * 1.3)},${Math.round(baseRgb[1] * 1.3)},${Math.round(baseRgb[2] * 1.3)})`;
+    for (let i = 0; i < 30; i++) ctx.fillRect(Math.floor(seededRandom(seed + i + 200, 0, 0) * 32), Math.floor(seededRandom(seed + i + 300, 0, 0) * 32), 1, 1);
+  } else if (variant === 1) for (let i = 0; i < 6; i++) { const c = Math.floor(seededRandom(seed + i, 0, 0) * 28) + 2; for (let j = 0; j < 3 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 4); j++) ctx.fillRect(c + j, Math.floor(seededRandom(seed + i + 100, 0, 0) * 28) + 2 + (j % 2), 1, 1); }
+  else if (variant === 2) for (let i = 0; i < 4; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i + 100, 0, 0) * 20) + 6, 4 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 4), 2);
+  else for (let i = 0; i < 12; i++) { const r = Math.floor(seededRandom(seed + i, 0, 0) * 26) + 3; ctx.fillRect(r, Math.floor(seededRandom(seed + i + 100, 0, 0) * 26) + 3, 3, 2); }
 }
 
-/** Generic ore deposit drawing (kept for backward compatibility, delegates to type-specific) */
-export function drawOreDeposit(
-  ctx: CanvasRenderingContext2D,
-  material: MaterialId,
-  seed: number = 0
-): void {
-  // Delegate to type-specific drawing functions
+export function drawWaterTile(ctx: CanvasRenderingContext2D, seed: number = 0): void {
+  drawBaseTerrain(ctx, "water", seed);
+  const variant = getTerrainVariant(0, 0, seed, "water");
+  const baseRgb = rgbFromCss(getTerrainColor("water").css);
+  if (variant === 0) for (let row = 0; row < 32; row += 4) for (let col = Math.floor(seededRandom(seed + row, 0, 0) * 3); col < 32; col += 6) ctx.fillRect(col, row, 2, 1);
+  else if (variant === 1) for (let i = 0; i < 20; i++) ctx.fillRect(Math.floor(seededRandom(seed + i, 0, 0) * 30), Math.floor(seededRandom(seed + i + 100, 0, 0) * 30), 1, 1);
+  else for (let wave = 0; wave < 5; wave++) for (let x = 0; x < 32; x += 4) ctx.fillRect(x, Math.floor(seededRandom(seed + wave, 0, 0) * 28) + 2 - (1 + Math.floor(seededRandom(seed + wave + 100, x, 0) * 2)), 2, 1);
+}
+
+function drawDepositStage(ctx: CanvasRenderingContext2D, stage: DepositStage, earthRgb: [number, number, number], chunkRgb: [number, number, number], seed: number, countMultiplier: number, sizeOffset: number, highlightChance: number): void {
+  if (stage === "rich") { ctx.fillStyle = `rgb(${earthRgb[0]},${earthRgb[1]},${earthRgb[2]})`; ctx.fillRect(6, 6, 20, 20); for (let i = 0; i < 14 * countMultiplier; i++) { const c = Math.floor(seededRandom(seed + i * 7, 0, 0) * 20) + 6; drawMineralChunk(ctx, c, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 20) + 6, 3 + Math.floor(seededRandom(seed + i * 7 + 200, 0, 0) * sizeOffset), chunkRgb); if (seededRandom(seed + i * 7 + 300, 0, 0) > highlightChance) { ctx.fillStyle = SHADING_PALETTE.highlight.css; ctx.fillRect(c + 1, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 20) + 7, 1, 1); } } }
+  else if (stage === "medium") { ctx.fillStyle = `rgb(${earthRgb[0]},${earthRgb[1]},${earthRgb[2]})`; ctx.fillRect(8, 8, 16, 16); for (let i = 0; i < 10 * countMultiplier; i++) { const c = Math.floor(seededRandom(seed + i * 7, 0, 0) * 20) + 6; drawMineralChunk(ctx, c, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 20) + 6, 2 + Math.floor(seededRandom(seed + i * 7 + 200, 0, 0) * sizeOffset), chunkRgb); } }
+  else if (stage === "low") { ctx.fillStyle = `rgb(${earthRgb[0]},${earthRgb[1]},${earthRgb[2]})`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 6 * countMultiplier; i++) { const c = Math.floor(seededRandom(seed + i * 7, 0, 0) * 18) + 7; drawMineralChunk(ctx, c, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 18) + 7, 1 + Math.floor(seededRandom(seed + i * 7 + 200, 0, 0) * sizeOffset), chunkRgb); } }
+  else { ctx.fillStyle = `rgb(${earthRgb[0] - 30},${earthRgb[1] - 25},${earthRgb[2] - 20})`; ctx.fillRect(8, 8, 16, 16); ctx.fillStyle = `rgb(${earthRgb[0] - 50},${earthRgb[1] - 45},${earthRgb[2] - 40})`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 3; i++) ctx.fillRect(Math.floor(seededRandom(seed + i * 7, 0, 0) * 16) + 8, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 16) + 8, 1, 1); }
+}
+
+export function drawIronOreDeposit(ctx: CanvasRenderingContext2D, seed: number = 0, stage: DepositStage = "rich"): void {
+  const rgb = rgbFromCss(getDepositColor("iron_ore").css);
+  if (stage === "depleted") { ctx.fillStyle = `rgb(90,75,50)`; ctx.fillRect(8, 8, 16, 16); ctx.fillStyle = `rgb(70,55,35)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 3; i++) ctx.fillRect(Math.floor(seededRandom(seed + i * 7, 0, 0) * 16) + 8, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 16) + 8, 1, 1); return; }
+  if (stage === "rich") { ctx.fillStyle = `rgb(139,115,85)`; ctx.fillRect(6, 6, 20, 20); for (let i = 0; i < 14; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 7, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 20) + 6, 4, rgb); }
+  else if (stage === "medium") { ctx.fillStyle = `rgb(139,115,85)`; ctx.fillRect(8, 8, 16, 16); for (let i = 0; i < 10; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 7, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 20) + 6, 3, rgb); }
+  else { ctx.fillStyle = `rgb(139,115,85)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 6; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 7, 0, 0) * 18) + 7, Math.floor(seededRandom(seed + i * 7 + 100, 0, 0) * 18) + 7, 2, rgb); }
+}
+
+export function drawCopperOreDeposit(ctx: CanvasRenderingContext2D, seed: number = 0, stage: DepositStage = "rich"): void {
+  const rgb = rgbFromCss(getDepositColor("copper_ore").css);
+  if (stage === "depleted") { ctx.fillStyle = `rgb(90,75,50)`; ctx.fillRect(8, 8, 16, 16); ctx.fillStyle = `rgb(70,55,35)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 3; i++) ctx.fillRect(Math.floor(seededRandom(seed + i * 5, 0, 0) * 16) + 8, Math.floor(seededRandom(seed + i * 5 + 100, 0, 0) * 16) + 8, 1, 1); return; }
+  if (stage === "rich") { ctx.fillStyle = `rgb(139,115,85)`; ctx.fillRect(6, 6, 20, 20); for (let i = 0; i < 16; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 5, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 5 + 100, 0, 0) * 20) + 6, 3, rgb); }
+  else if (stage === "medium") { ctx.fillStyle = `rgb(139,115,85)`; ctx.fillRect(8, 8, 16, 16); for (let i = 0; i < 11; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 5, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 5 + 100, 0, 0) * 20) + 6, 2, rgb); }
+  else { ctx.fillStyle = `rgb(139,115,85)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 7; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 5, 0, 0) * 18) + 7, Math.floor(seededRandom(seed + i * 5 + 100, 0, 0) * 18) + 7, 2, rgb); }
+}
+
+export function drawCoalDeposit(ctx: CanvasRenderingContext2D, seed: number = 0, stage: DepositStage = "rich"): void {
+  const rgb = rgbFromCss(getDepositColor("coal").css);
+  const darkRgb: [number, number, number] = [Math.min(rgb[0], 99), Math.min(rgb[1], 99), Math.min(rgb[2], 99)];
+  if (stage === "depleted") { ctx.fillStyle = `rgb(30,28,25)`; ctx.fillRect(8, 8, 16, 16); ctx.fillStyle = `rgb(20,18,15)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 3; i++) ctx.fillRect(Math.floor(seededRandom(seed + i * 4, 0, 0) * 16) + 8, Math.floor(seededRandom(seed + i * 4 + 100, 0, 0) * 16) + 8, 1, 1); return; }
+  if (stage === "rich") { ctx.fillStyle = `rgb(60,50,40)`; ctx.fillRect(6, 6, 20, 20); for (let i = 0; i < 18; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 4, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 4 + 100, 0, 0) * 20) + 6, 2, darkRgb); }
+  else if (stage === "medium") { ctx.fillStyle = `rgb(60,50,40)`; ctx.fillRect(8, 8, 16, 16); for (let i = 0; i < 12; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 4, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 4 + 100, 0, 0) * 20) + 6, 2, darkRgb); }
+  else { ctx.fillStyle = `rgb(60,50,40)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 7; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 4, 0, 0) * 18) + 7, Math.floor(seededRandom(seed + i * 4 + 100, 0, 0) * 18) + 7, 1, darkRgb); }
+}
+
+export function drawSilicaSandDeposit(ctx: CanvasRenderingContext2D, seed: number = 0, stage: DepositStage = "rich"): void {
+  const rgb = rgbFromCss(getDepositColor("silica_sand").css);
+  const lightRgb: [number, number, number] = [Math.max(rgb[0], 151), Math.max(rgb[1], 151), Math.max(rgb[2], 151)];
+  if (stage === "depleted") { ctx.fillStyle = `rgb(150,120,80)`; ctx.fillRect(8, 8, 16, 16); ctx.fillStyle = `rgb(100,80,50)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 3; i++) ctx.fillRect(Math.floor(seededRandom(seed + i * 6, 0, 0) * 16) + 8, Math.floor(seededRandom(seed + i * 6 + 100, 0, 0) * 16) + 8, 1, 1); return; }
+  if (stage === "rich") { ctx.fillStyle = `rgb(210,180,140)`; ctx.fillRect(6, 6, 20, 20); for (let i = 0; i < 16; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 6, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 6 + 100, 0, 0) * 20) + 6, 2, lightRgb); }
+  else if (stage === "medium") { ctx.fillStyle = `rgb(210,180,140)`; ctx.fillRect(8, 8, 16, 16); for (let i = 0; i < 11; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 6, 0, 0) * 20) + 6, Math.floor(seededRandom(seed + i * 6 + 100, 0, 0) * 20) + 6, 2, lightRgb); }
+  else { ctx.fillStyle = `rgb(210,180,140)`; ctx.fillRect(10, 10, 12, 12); for (let i = 0; i < 6; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i * 6, 0, 0) * 18) + 7, Math.floor(seededRandom(seed + i * 6 + 100, 0, 0) * 18) + 7, 1, lightRgb); }
+}
+
+export function drawOreDeposit(ctx: CanvasRenderingContext2D, material: MaterialId, seed: number = 0, stage: DepositStage = "rich"): void {
   switch (material) {
-    case "iron_ore":
-      drawIronOreDeposit(ctx, seed);
-      break;
-    case "copper_ore":
-      drawCopperOreDeposit(ctx, seed);
-      break;
-    case "coal":
-      drawCoalDeposit(ctx, seed);
-      break;
-    case "silica_sand":
-      drawSilicaSandDeposit(ctx, seed);
-      break;
-    default:
-      // For processed materials, use generic approach with SHADING_PALETTE
-      const depositColor = getDepositColor(material);
-      const rgb = rgbFromCss(depositColor.css);
-      
-      const clusterCount = 15;
-      for (let i = 0; i < clusterCount; i++) {
-        const cx = Math.floor(seededRandom(seed + i, 0, 0) * 26) + 3;
-        const cy = Math.floor(seededRandom(seed + i + 100, 0, 0) * 26) + 3;
-        const size = 1 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 3);
-        
-        drawMineralChunk(ctx, cx, cy, size, rgb, [0, 0, 0]);
-      }
+    case "iron_ore": drawIronOreDeposit(ctx, seed, stage); break;
+    case "copper_ore": drawCopperOreDeposit(ctx, seed, stage); break;
+    case "coal": drawCoalDeposit(ctx, seed, stage); break;
+    case "silica_sand": drawSilicaSandDeposit(ctx, seed, stage); break;
+    default: const rgb = rgbFromCss(getDepositColor(material).css); for (let i = 0; i < 15; i++) drawMineralChunk(ctx, Math.floor(seededRandom(seed + i, 0, 0) * 26) + 3, Math.floor(seededRandom(seed + i + 100, 0, 0) * 26) + 3, 1 + Math.floor(seededRandom(seed + i + 200, 0, 0) * 3), rgb);
   }
 }
 
-// ============================================================================
-// Combined Terrain + Deposit Drawing
-// ============================================================================
-
-/** Draw complete terrain tile with optional ore deposit overlay */
-export function drawTerrainTile(
-  ctx: CanvasRenderingContext2D,
-  terrain: TerrainType,
-  deposit: MaterialId | null = null,
-  seed: number = 0
-): void {
-  // Draw base terrain
-  switch (terrain) {
-    case "grass":
-      drawGrassTile(ctx, seed);
-      break;
-    case "rock":
-      drawRockTile(ctx, seed);
-      break;
-    case "water":
-      drawWaterTile(ctx, seed);
-      break;
-  }
-  
-  // Draw ore deposit overlay if present
-  if (deposit) {
-    drawOreDeposit(ctx, deposit, seed + 1000);
-  }
+export function drawTerrainTile(ctx: CanvasRenderingContext2D, terrain: TerrainType, deposit: MaterialId | null = null, seed: number = 0): void {
+  if (terrain === "grass") drawGrassTile(ctx, seed);
+  else if (terrain === "rock") drawRockTile(ctx, seed);
+  else drawWaterTile(ctx, seed);
+  if (deposit) drawOreDeposit(ctx, deposit, seed + 1000);
 }
