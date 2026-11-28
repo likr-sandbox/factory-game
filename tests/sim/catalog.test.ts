@@ -255,17 +255,62 @@ describe("Tech Catalog", () => {
 });
 
 describe("Quest Catalog", () => {
-  it("should have quest entries with valid structure", () => {
-    const questIds = Object.keys(QUEST_CATALOG);
-    expect(questIds.length).toBeGreaterThan(0);
-    
+  // All 9 craftable items from RECIPE_CATALOG (excluding high-efficiency variants)
+  const questIds: RecipeId[] = [
+    "iron_plate", "copper_plate", "iron_gear", "copper_wire",
+    "steel_plate", "silicon_wafer", "circuit_board", "microchip",
+    "automation_module",
+  ];
+
+  it("should have all 9 craftable item quests", () => {
+    expect(Object.keys(QUEST_CATALOG).length).toBe(9);
+    for (const id of questIds) {
+      expect(QUEST_CATALOG[id]).toBeDefined();
+    }
+  });
+
+  it("should have positive rewardPoints for all quests", () => {
+    for (const id of questIds) {
+      const quest = QUEST_CATALOG[id];
+      expect(quest).toBeDefined();
+      if (quest) {
+        expect(quest.rewardPoints).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("should have valid deliver with materials from MATERIAL_CATALOG", () => {
+    const validMaterials = Object.keys(MATERIAL_CATALOG);
+    for (const id of questIds) {
+      const quest = QUEST_CATALOG[id];
+      expect(quest).toBeDefined();
+      if (quest && quest.deliver) {
+        const materials = Object.keys(quest.deliver);
+        expect(materials.length).toBeGreaterThan(0);
+        for (const materialId of materials) {
+          expect(validMaterials).toContain(materialId);
+        }
+      }
+    }
+  });
+
+  it("should have valid phase (1-4) for all quests", () => {
+    for (const id of questIds) {
+      const quest = QUEST_CATALOG[id];
+      expect(quest).toBeDefined();
+      if (quest) {
+        expect([1, 2, 3, 4]).toContain(quest.phase);
+      }
+    }
+  });
+
+  it("should have non-empty Japanese names and descriptions", () => {
     for (const id of questIds) {
       const quest = QUEST_CATALOG[id];
       expect(quest).toBeDefined();
       if (quest) {
         expect(quest.nameJa.length).toBeGreaterThan(0);
         expect(quest.description.length).toBeGreaterThan(0);
-        expect([1, 2, 3, 4]).toContain(quest.phase);
       }
     }
   });
@@ -275,6 +320,22 @@ describe("Quest Catalog", () => {
     for (const quest of Object.values(QUEST_CATALOG)) {
       phases.add(quest.phase);
     }
-    expect(phases.size).toBeGreaterThan(0);
+    // Should have at least phases 1, 2, 3, 4 covered
+    expect(phases.size).toBeGreaterThanOrEqual(3);
+    expect(phases).toContain(1);
+  });
+
+  it("should match quest deliver target with the recipe output material", () => {
+    // Each quest should deliver the main output of its corresponding recipe
+    for (const id of questIds) {
+      const quest = QUEST_CATALOG[id];
+      const recipe = RECIPE_CATALOG[id];
+      expect(quest).toBeDefined();
+      expect(recipe).toBeDefined();
+      if (quest && recipe && quest.deliver) {
+        const deliveredMaterial = Object.keys(quest.deliver)[0];
+        expect(deliveredMaterial).toBe(id);
+      }
+    }
   });
 });
