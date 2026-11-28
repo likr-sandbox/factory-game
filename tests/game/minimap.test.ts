@@ -510,17 +510,18 @@ describe("Minimap Visibility Toggle", () => {
     const { setVisible } = mountMinimap(container as unknown as HTMLElement, { visible: true });
     
     const minimapContainer = container.children[0] as StubElement;
+    const canvas = minimapContainer.children[1] as unknown as StubCanvas;
     
     // Initially visible
-    expect(minimapContainer.style.display).not.toBe("none");
+    expect(canvas.style.display).not.toBe("none");
     
     // Toggle to hidden
     setVisible(false);
-    expect(minimapContainer.style.display).toBe("none");
+    expect(canvas.style.display).toBe("none");
     
     // Toggle back to visible
     setVisible(true);
-    expect(minimapContainer.style.display).not.toBe("none");
+    expect(canvas.style.display).not.toBe("none");
   });
 });
 
