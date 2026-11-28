@@ -192,16 +192,19 @@ function drawSmelterFlame(ctx: CanvasRenderingContext2D, frame: number) {
   const flame1 = "rgb(255, 100, 0)";
   const flame2 = "rgb(255, 200, 50)";
   const flame3 = "rgb(255, 255, 100)";
+  const ember1 = "rgb(180, 60, 20)";
+  const ember2 = "rgb(220, 120, 40)";
   
-  // Flickering flame in furnace opening
+  // Frame 0: low/ember state (idle or low flame); Frame 1: bright active flame
   if (frame === 0) {
-    fill(ctx, 12, 14, 8, 6, flame1);
-    fill(ctx, 14, 12, 4, 4, flame2);
-    fill(ctx, 15, 11, 2, 2, flame3);
+    // Small ember glow at bottom of furnace
+    fill(ctx, 13, 17, 6, 3, ember1);
+    fill(ctx, 14, 16, 4, 2, ember2);
   } else {
-    fill(ctx, 12, 15, 8, 5, flame1);
-    fill(ctx, 13, 13, 6, 4, flame2);
-    fill(ctx, 15, 12, 2, 3, flame3);
+    // Bright active flame flickering upward
+    fill(ctx, 12, 14, 8, 6, flame1);
+    fill(ctx, 13, 12, 6, 4, flame2);
+    fill(ctx, 15, 10, 2, 3, flame3);
   }
 }
 
@@ -312,6 +315,11 @@ export function drawHub(ctx: CanvasRenderingContext2D, dir: Direction, frame: nu
   drawDirectionIndicator(ctx, dir);
   // Crown/top detail
   fill(ctx, 10, 2, 12, 4, "rgb(255, 220, 180)");
+  // Central core pulse: brighter inner emblem on frame > 0
+  if (frame > 0) {
+    fill(ctx, 13, 13, 6, 6, "rgb(255, 230, 200)");
+    fill(ctx, 15, 15, 2, 2, "rgb(255, 255, 240)");
+  }
   if (faulted) drawFaultBadge(ctx);
 }
 

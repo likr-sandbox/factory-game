@@ -35,6 +35,8 @@ function drawPlate(ctx: CanvasRenderingContext2D, color: string) {
   fillRect(ctx, 6, 21, 3, 3, "#333"); fillRect(ctx, 23, 21, 3, 3, "#333");
   ctx.strokeStyle = "#333"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(16,7); ctx.lineTo(16,25); ctx.moveTo(4,16); ctx.lineTo(28,16); ctx.stroke();
+  // Crisp 1px dark outline border
+  strokeRect(ctx, 4, 6, 24, 20, "#222");
 }
 
 /** Draw gear sprite */
@@ -47,6 +49,9 @@ function drawGear(ctx: CanvasRenderingContext2D, color: string) {
   ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill();
   ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fillStyle = "#000"; ctx.fill();
   ctx.beginPath(); ctx.arc(cx-3, cy-3, 3, 0, Math.PI*2); ctx.fillStyle = "#CCC"; ctx.fill();
+  // Crisp 1px dark outline border
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, 14.5, 0, Math.PI*2); ctx.stroke();
 }
 
 /** Draw wire sprite */
@@ -65,6 +70,9 @@ function drawWire(ctx: CanvasRenderingContext2D, color: string) {
     fillRect(ctx, 16 + Math.cos(a)*r - 2, 16 + Math.sin(a)*r - 2, 4, 4, "#FFD700");
   }
   fillRect(ctx, 14, 4, 4, 4, "#654321"); fillRect(ctx, 14, 24, 4, 4, "#654321");
+  // Crisp 1px dark outline border
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(16, 16, 15, 0, Math.PI*2); ctx.stroke();
 }
 
 /** Draw wafer sprite */
@@ -112,6 +120,8 @@ function drawAutomationModule(ctx: CanvasRenderingContext2D) {
   for (let i = 0; i < 4; i++) {
     fillRect(ctx, 6, 20, 2, 2, "#E6E6FA"); fillRect(ctx, 24, 20, 2, 2, "#E6E6FA");
   }
+  // Crisp 1px dark outline border
+  strokeRect(ctx, 3, 4, 26, 24, "#222");
 }
 
 /** Draw silica sand sprite */
