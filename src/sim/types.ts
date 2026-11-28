@@ -54,6 +54,9 @@ export type RecipeId =
   | "microchip"
   | "automation_module";
 
+export type TechId = "filter_splitter" | "underground_belt" | "sensor"
+  | "recycler" | "high_efficiency" | "advanced_smelting" | "electronics" | "automation";
+
 // ============================================================================
 // Core Data Structures
 // ============================================================================
