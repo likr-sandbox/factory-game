@@ -35,7 +35,12 @@ export function mountWebMcpPanel(container: HTMLElement, handle: WebMcpHandle): 
   const content = doc.createElement("div");
   content.className = "webmcp-panel-content";
 
-  // Status badge
+  // Compact status badge for collapsed view
+  const badge = doc.createElement("span");
+  badge.className = "webmcp-panel-badge";
+  badge.textContent = handle.detected ? "接続済み" : "手動";
+
+  // Status text (full description shown when expanded)
   const status = doc.createElement("div");
   status.className = "webmcp-panel-status";
   updateStatus();
@@ -44,6 +49,7 @@ export function mountWebMcpPanel(container: HTMLElement, handle: WebMcpHandle): 
   const logList = doc.createElement("ul");
   logList.className = "webmcp-panel-log-list";
 
+  content.appendChild(badge);
   content.appendChild(status);
   content.appendChild(logList);
   panel.appendChild(content);
@@ -52,17 +58,23 @@ export function mountWebMcpPanel(container: HTMLElement, handle: WebMcpHandle): 
   renderLogs(handle.getLogs());
 
   // Toggle collapse/expand
-  let isExpanded = true;
+  let isExpanded = false;
+  content.style.display = "none";
+  toggleBtn.textContent = "展開";
+  toggleBtn.setAttribute("aria-expanded", "false");
+  panel.classList.add("collapsed");
   toggleBtn.addEventListener("click", () => {
     isExpanded = !isExpanded;
     if (isExpanded) {
       content.style.display = "";
       toggleBtn.textContent = "折りたたみ";
       toggleBtn.setAttribute("aria-expanded", "true");
+      panel.classList.remove("collapsed");
     } else {
       content.style.display = "none";
       toggleBtn.textContent = "展開";
       toggleBtn.setAttribute("aria-expanded", "false");
+      panel.classList.add("collapsed");
     }
   });
 

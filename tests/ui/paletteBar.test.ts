@@ -322,4 +322,52 @@ describe("createInspector", () => {
     handle.destroy();
     expect(container.children.length).toBe(0);
   });
+
+  it("hides inspector panel when coord is null", () => {
+    const onRepair = vi.fn(), onSetRecipe = vi.fn();
+    const handle = createInspector(container as unknown as HTMLElement, { onRepair, onSetRecipe });
+    const world = createWorld(42);
+    
+    // Initially panel should be visible
+    const panel = container.children[0]!;
+    expect(panel.style.display).not.toBe("none");
+    
+    // Hide when coord is null
+    handle.update(world, null);
+    expect(panel.style.display).toBe("none");
+    
+    handle.destroy();
+  });
+
+  it("hides inspector panel when tile has no building", () => {
+    const onRepair = vi.fn(), onSetRecipe = vi.fn();
+    const handle = createInspector(container as unknown as HTMLElement, { onRepair, onSetRecipe });
+    const world = createWorld(42);
+    
+    // Update with coord but no building on that tile
+    handle.update(world, { x: 10, y: 10 });
+    const panel = container.children[0]!;
+    expect(panel.style.display).toBe("none");
+    
+    handle.destroy();
+  });
+
+  it("shows inspector panel when a building is selected", () => {
+    const onRepair = vi.fn(), onSetRecipe = vi.fn();
+    const handle = createInspector(container as unknown as HTMLElement, { onRepair, onSetRecipe });
+    const world = createWorld(42);
+    
+    // First hide the panel
+    handle.update(world, null);
+    const panel = container.children[0]!;
+    expect(panel.style.display).toBe("none");
+    
+    // Show panel when building is selected
+    world.tiles[15]![15]!.buildingId = "smelter1";
+    world.buildings["smelter1"] = { id: "smelter1", type: "smelter", x: 15, y: 15, direction: "N", inputBuffer: {}, outputBuffer: {}, beltItems: [], craftProgress: 0, roundRobinIndex: 0, faulted: false, load: 0, idleTicks: 0, blockedTicks: 0, recipeId: "iron_plate" };
+    handle.update(world, { x: 15, y: 15 });
+    expect(panel.style.display).not.toBe("none");
+    
+    handle.destroy();
+  });
 });
