@@ -32,7 +32,7 @@ export function mountPaletteBar(container: HTMLElement, options: PaletteBarOptio
   container.innerHTML = "";
 
   const wrapper = doc.createElement("div");
-  wrapper.style.cssText = "display:flex;align-items:center;flex-wrap:wrap;gap:6px;width:100%";
+  wrapper.style.cssText = "display:flex;align-items:center;flex-wrap:nowrap;overflow-x:auto;gap:6px;width:100%;height:64px;min-height:64px";
   container.appendChild(wrapper);
 
   const buildingGroup = doc.createElement("div");
@@ -46,7 +46,7 @@ export function mountPaletteBar(container: HTMLElement, options: PaletteBarOptio
     const btn = doc.createElement("button");
     btn.textContent = BUILDING_LABELS[type] ?? type;
     btn.className = "palette-btn";
-    btn.style.cssText = "padding:6px 10px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px;font-family:'Segoe UI',sans-serif;white-space:nowrap";
+    btn.style.cssText = "padding:4px 8px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px;font-family:'Segoe UI',sans-serif;white-space:nowrap";
     btn.addEventListener("click", () => options.onBuildingSelect(type));
     buildingGroup.appendChild(btn);
     buildingButtons[type] = btn;
@@ -63,19 +63,19 @@ export function mountPaletteBar(container: HTMLElement, options: PaletteBarOptio
 
   const rotateBtn = doc.createElement("button");
   rotateBtn.textContent = ACTION_LABELS.rotate;
-  rotateBtn.style.cssText = "padding:6px 10px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px";
+  rotateBtn.style.cssText = "padding:4px 8px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px";
   rotateBtn.addEventListener("click", options.onRotate);
   actionGroup.appendChild(rotateBtn);
 
   const demolishBtn = doc.createElement("button");
   demolishBtn.textContent = ACTION_LABELS.demolish;
-  demolishBtn.style.cssText = "padding:6px 10px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px";
+  demolishBtn.style.cssText = "padding:4px 8px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px";
   demolishBtn.addEventListener("click", options.onDemolish);
   actionGroup.appendChild(demolishBtn);
 
   const inspectBtn = doc.createElement("button");
   inspectBtn.textContent = ACTION_LABELS.inspect;
-  inspectBtn.style.cssText = "padding:6px 10px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px";
+  inspectBtn.style.cssText = "padding:4px 8px;background:#0f3460;color:#eaeaea;border:2px solid #4a4a6a;border-radius:4px;cursor:pointer;font-size:12px";
   inspectBtn.addEventListener("click", options.onInspectToggle);
   actionGroup.appendChild(inspectBtn);
 

@@ -221,6 +221,13 @@ export function createInspector(container: HTMLElement, callbacks: InspectorCall
     }
     updateBuildingInfo(building, coord);
     
+    // Auto-hide panel when no building is selected
+    if (!building) {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "";
+    }
+    
     // Update sensor alerts if sensor is selected
     if (building?.type === "sensor" && coord) {
       updateSensorAlerts(world, coord);
