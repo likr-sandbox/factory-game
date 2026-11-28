@@ -172,7 +172,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
-      minimapHandle?.update(activeWorld);
+      (minimapHandle?.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)?.call(minimapHandle, activeWorld, scene?.getCameraViewport());
       scene?.centerCameraOnHub();
     },
   });
@@ -265,16 +265,22 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       hud?.update(activeWorld);
       paletteBar?.sync(activeWorld, inputState);
       inspector?.update(activeWorld, inputState.inspectedCoord);
-      minimapHandle?.update(activeWorld);
+      (minimapHandle?.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)?.call(minimapHandle, activeWorld, scene?.getCameraViewport());
     },
     env: { document: doc as unknown as { modelContext?: ModelContextLike }, navigator: (globalThis as unknown as { navigator?: { modelContext?: ModelContextLike } }).navigator },
   });
 
   mountWebMcpPanel(webmcpContainer, webmcpHandle);
 
-  // Mount minimap if container exists
-  if (minimapContainer) {
-    minimapHandle = mountMinimap(minimapContainer, {
+  // Mount minimap - create container inside gameContainer if #minimap-container doesn't exist
+  let actualMinimapContainer = minimapContainer;
+  if (!actualMinimapContainer && gameContainer) {
+    actualMinimapContainer = doc.createElement("div");
+    actualMinimapContainer.id = "minimap-container";
+    gameContainer.appendChild(actualMinimapContainer);
+  }
+  if (actualMinimapContainer) {
+    minimapHandle = mountMinimap(actualMinimapContainer, {
       onNavigate: (tileX, tileY) => {
         // Center camera on the clicked tile
         scene?.centerCameraOnTile(tileX, tileY);
@@ -327,7 +333,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
     hud?.update(activeWorld);
     paletteBar?.sync(activeWorld, inputState);
     inspector?.update(activeWorld, inputState.inspectedCoord);
-    minimapHandle?.update(activeWorld);
+    (minimapHandle?.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)?.call(minimapHandle, activeWorld, scene?.getCameraViewport());
     paletteBar?.setFeedback(null); // Clear feedback on successful mutation
   });
 
@@ -361,7 +367,7 @@ export function initGame(doc: Document = globalThis.document as Document): void 
       inspector.update(activeWorld, inputState.inspectedCoord);
     }
     if (minimapHandle) {
-      minimapHandle.update(activeWorld);
+      (minimapHandle.update as (world: WorldState, cameraViewport?: { left: number; top: number; width: number; height: number }) => void)(activeWorld, scene?.getCameraViewport());
     }
 
     requestAnimationFrame(gameLoop);

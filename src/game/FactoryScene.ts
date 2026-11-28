@@ -94,10 +94,11 @@ export class FactoryScene extends Scene {
       return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
     }
     const camera = this.cameras.main;
+    const zoom = camera.zoom || 1;
     const left = Math.floor(camera.scrollX / TILE_SIZE);
     const top = Math.floor(camera.scrollY / TILE_SIZE);
-    const right = Math.ceil((camera.scrollX + (camera.width || 0)) / TILE_SIZE);
-    const bottom = Math.ceil((camera.scrollY + (camera.height || 0)) / TILE_SIZE);
+    const right = Math.ceil((camera.scrollX + (camera.width || 0) / zoom) / TILE_SIZE);
+    const bottom = Math.ceil((camera.scrollY + (camera.height || 0) / zoom) / TILE_SIZE);
     return {
       left,
       right,
@@ -392,6 +393,11 @@ export class FactoryScene extends Scene {
         this.placementGhost.hide();
       }
 
+      // Sync mode overlay mode with current input state
+      if (this.modeOverlay) {
+        this.modeOverlay.setMode(this.inputState?.mode ?? "place");
+      }
+
       // Update mode overlay for demolish/inspect modes
       if (this.modeOverlay) {
         if (this.inputState?.mode === "demolish") {
@@ -470,9 +476,10 @@ export class FactoryScene extends Scene {
         if (this.isInputFocused()) return;
         if (!this.inputState) return;
         this.inputState.direction = rotateDirection(this.inputState.direction);
-        // Update placement ghost preview immediately with new direction
+        // Update placement ghost preview immediately with new direction and validity check
         if (this.placementGhost && this.inputState.mode === "place" && this.inputState.selectedBuilding && this.lastHoveredTile) {
-          this.placementGhost.update(this.lastHoveredTile.x, this.lastHoveredTile.y, this.inputState.selectedBuilding, this.inputState.direction);
+          const canPlace = this.world ? canPlaceBuildingAt(this.world, this.inputState, this.lastHoveredTile.x, this.lastHoveredTile.y).success : false;
+          this.placementGhost.update(this.lastHoveredTile.x, this.lastHoveredTile.y, this.inputState.selectedBuilding, this.inputState.direction, canPlace);
         }
         this.events.emit("worldMutated");
       });
