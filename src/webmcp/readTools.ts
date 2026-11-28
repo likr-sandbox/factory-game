@@ -42,16 +42,33 @@ export function createReadToolHandlers(
         typeof x !== "number" ||
         typeof y !== "number" ||
         typeof width !== "number" ||
-        typeof height !== "number"
+        typeof height !== "number" ||
+        !Number.isInteger(x) ||
+        !Number.isInteger(y) ||
+        !Number.isInteger(width) ||
+        !Number.isInteger(height)
       ) {
         throw new Error(
-          "inspect_region: parameters x, y, width, height must be finite numbers"
+          "inspect_region: parameters x, y, width, height must be integers"
         );
       }
 
       if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
         throw new Error(
           "inspect_region: parameters x, y, width, height must be finite numbers"
+        );
+      }
+
+      // Enforce maximum size limit of 24x24
+      if (width > 24 || height > 24) {
+        throw new Error(
+          "inspect_region: width and height must be <= 24"
+        );
+      }
+
+      if (width <= 0 || height <= 0) {
+        throw new Error(
+          "inspect_region: width and height must be > 0"
         );
       }
 
@@ -69,6 +86,13 @@ export function createReadToolHandlers(
       const material = params.material as import("../sim/types").MaterialId | undefined;
       const onlyAvailable = params.onlyAvailable as boolean | undefined;
       const limit = params.limit as number | undefined;
+
+      // Validate limit is a positive integer if provided
+      if (limit !== undefined) {
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit <= 0) {
+          throw new Error("find_resources: limit must be a positive integer");
+        }
+      }
 
       const world = getWorld();
       return findResources(world, { material, onlyAvailable, limit });
@@ -95,6 +119,13 @@ export function createReadToolHandlers(
 
       const params = input || {};
       const windowTicks = params.windowTicks as number | undefined;
+
+      // Validate windowTicks is a positive integer if provided
+      if (windowTicks !== undefined) {
+        if (typeof windowTicks !== "number" || !Number.isInteger(windowTicks) || windowTicks <= 0) {
+          throw new Error("get_metrics: windowTicks must be a positive integer");
+        }
+      }
 
       const world = getWorld();
       return getMetrics(world, { windowTicks });

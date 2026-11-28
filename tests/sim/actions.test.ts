@@ -111,6 +111,23 @@ describe("placeBuilding", () => {
     expect(r.success).toBe(true);
     expect(world.buildings[getSuccessResult(r).buildingId!]!.recipeId).toBe("steel_plate");
   });
+
+  it("should fail with INVALID_INPUT when coordinates are non-integer", () => {
+    const r = placeBuilding(world, { x: 10.5, y: 10, type: "belt", direction: "E" } as any);
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("INVALID_INPUT");
+    
+    const r2 = placeBuilding(world, { x: 10, y: 10.7, type: "belt", direction: "E" } as any);
+    expect(r2.success).toBe(false);
+    expect(getFailureResult(r2).error.code).toBe("INVALID_INPUT");
+  });
+
+  it("should fail with INVALID_INPUT when building type does not exist in BUILDING_CATALOG", () => {
+    const r = placeBuilding(world, { x: 10, y: 10, type: "invalid_building" as any, direction: "N" });
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("INVALID_INPUT");
+    expect(getFailureResult(r).error.message).toContain("Unknown building type");
+  });
 });
 
 describe("placeBeltLine", () => {
@@ -145,6 +162,16 @@ describe("placeBeltLine", () => {
     r = placeBeltLine(world, { startX: wx - 2, startY: wy, endX: wx + 2, endY: wy });
     expect(r.success).toBe(false); expect(getFailureResult(r).error.code).toBe("INVALID_TERRAIN");
   });
+
+  it("should fail with INVALID_INPUT when coordinates are non-integer (no infinite loop)", () => {
+    const r = placeBeltLine(world, { startX: 10.5, startY: 10, endX: 15, endY: 12 } as any);
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("INVALID_INPUT");
+    
+    const r2 = placeBeltLine(world, { startX: 10, startY: 10, endX: 15.3, endY: 12 } as any);
+    expect(r2.success).toBe(false);
+    expect(getFailureResult(r2).error.code).toBe("INVALID_INPUT");
+  });
 });
 
 describe("removeArea", () => {
@@ -165,6 +192,26 @@ describe("removeArea", () => {
     expect(world.buildings["hub"]).toBeDefined();
     const r = removeArea(world, { x: world.hubOrigin.x - 1, y: world.hubOrigin.y - 1, width: 4, height: 4 });
     expect(r.success).toBe(true); expect(world.buildings["hub"]).toBeDefined();
+  });
+
+  it("should fail with INVALID_INPUT when coordinates/dimensions are non-integer", () => {
+    const r = removeArea(world, { x: 10.5, y: 10, width: 3, height: 1 } as any);
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("INVALID_INPUT");
+    
+    const r2 = removeArea(world, { x: 10, y: 10, width: 3.7, height: 1 } as any);
+    expect(r2.success).toBe(false);
+    expect(getFailureResult(r2).error.code).toBe("INVALID_INPUT");
+  });
+
+  it("should fail with INVALID_INPUT when width/height is negative", () => {
+    const r = removeArea(world, { x: 10, y: 10, width: -1, height: 1 });
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("INVALID_INPUT");
+    
+    const r2 = removeArea(world, { x: 10, y: 10, width: 3, height: -5 });
+    expect(r2.success).toBe(false);
+    expect(getFailureResult(r2).error.code).toBe("INVALID_INPUT");
   });
 });
 
@@ -227,6 +274,19 @@ describe("setRecipe", () => {
     let r = setRecipe(world, { x: 10, y: 10, recipeId: "steel_plate" });
     expect(r.success).toBe(true);
     expect(world.buildings[s.buildingId!]!.recipeId).toBe("steel_plate");
+  });
+
+  it("should fail with INVALID_INPUT when coordinates are non-integer", () => {
+    const p = placeBuilding(world, { x: 10, y: 10, type: "smelter", direction: "N", recipeId: "iron_plate" });
+    expect(p.success).toBe(true);
+    
+    const r = setRecipe(world, { x: 10.5, y: 10, recipeId: "copper_plate" } as any);
+    expect(r.success).toBe(false);
+    expect(getFailureResult(r).error.code).toBe("INVALID_INPUT");
+    
+    const r2 = setRecipe(world, { x: 10, y: 10.3, recipeId: "copper_plate" } as any);
+    expect(r2.success).toBe(false);
+    expect(getFailureResult(r2).error.code).toBe("INVALID_INPUT");
   });
 });
 

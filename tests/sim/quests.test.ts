@@ -171,4 +171,77 @@ describe("Dynamic Delivery Quests", () => {
       expect(w1.activeQuests?.[0]?.questId).toBe(w2.activeQuests?.[0]?.questId);
     });
   });
+
+  describe("Regression tests for issue21", () => {
+    it("should NOT award rewards for expired but incomplete quests", () => {
+      const world = createTestWorld();
+      const quest = generateDynamicQuest(world)!;
+      
+      // Advance tick to expire the quest without completing it
+      world.tick = 6001;
+      
+      // Process should remove expired quest without awarding points
+      const initialPoints = world.researchPoints || 0;
+      processQuests(world);
+      
+      // Quest should be removed
+      expect(world.activeQuests?.some(q => q.questId === quest.questId)).toBe(false);
+      // But no rewards should be given (points unchanged)
+      expect(world.researchPoints).toBe(initialPoints);
+      // Should not be in completed list
+      expect(world.completedQuests?.includes(quest.questId)).toBe(false);
+    });
+
+    it("should award rewards only for completed quests", () => {
+      const world = createTestWorld();
+      const quest = generateDynamicQuest(world)!;
+      
+      // Complete the quest
+      const info = getQuestProgress(quest);
+      for (const [m, d] of Object.entries(info)) quest.progress[m] = d.target;
+      
+      const initialPoints = world.researchPoints || 0;
+      processQuests(world);
+      
+      // Should be completed with rewards
+      expect(world.completedQuests?.includes(quest.questId)).toBe(true);
+      expect(world.researchPoints).toBeGreaterThan(initialPoints);
+    });
+
+    it("should not generate quests for locked recipes initially", () => {
+      const world = createTestWorld();
+      
+      // Initially only basic recipes should be available
+      // Generate max active quests
+      for (let i = 0; i < MAX_ACTIVE_QUESTS; i++) {
+        generateDynamicQuest(world);
+      }
+      
+      // Check that none of the active quests are for tech-gated materials
+      const techGatedMaterials = ["microchip", "automation_module", "circuit_board"];
+      for (const quest of world.activeQuests || []) {
+        const material = Object.keys(quest.progress)[0];
+        expect(techGatedMaterials.includes(material || "")).toBe(false);
+      }
+    });
+
+    it("should not duplicate materials already in active quests", () => {
+      const world = createTestWorld();
+      
+      // Generate first quest
+      const quest1 = generateDynamicQuest(world)!;
+      const material1 = Object.keys(quest1.progress)[0];
+      
+      // Fill active slots
+      while (generateDynamicQuest(world)) {}
+      
+      // No other quest should request the same material
+      for (const quest of world.activeQuests || []) {
+        if (quest.questId !== quest1.questId) {
+          const material = Object.keys(quest.progress)[0];
+          expect(material).not.toBe(material1);
+        }
+      }
+    });
+  });
 });
