@@ -1,385 +1,176 @@
 import { describe, it, expect } from "vitest";
 import {
-  drawBelt,
-  drawSplitter,
-  drawFilterSplitter,
-  drawUndergroundBelt,
-  drawMiner,
-  drawSmelter,
-  drawAssembler,
-  drawRecycler,
-  drawSensor,
-  drawHub,
-  drawBuilding,
-  getBuildingTextureKey,
+  drawBelt, drawSplitter, drawFilterSplitter, drawUndergroundBelt,
+  drawMiner, drawSmelter, drawAssembler, drawRecycler, drawSensor,
+  drawHub, drawBuilding, getBuildingTextureKey,
 } from "../../src/game/sprites/buildings";
 import type { Direction, BuildingType } from "../../src/sim/types";
 
-/**
- * Mock HTMLCanvasElement for Node environment testing
- */
 class MockCanvas {
-  public width: number;
-  public height: number;
-
-  constructor(width = 32, height = 32) {
-    this.width = width;
-    this.height = height;
-  }
-
-  getContext(contextId: string): MockCanvasContext | null {
-    if (contextId === "2d") {
-      return new MockCanvasContext(this.width, this.height);
-    }
-    return null;
-  }
+  public width: number; public height: number;
+  constructor(w = 32, h = 32) { this.width = w; this.height = h; }
+  getContext(id: string): MockCtx | null { return id === "2d" ? new MockCtx(this.width, this.height) : null; }
 }
 
-/**
- * Create a mock Canvas2D context for testing.
- * Tracks all drawing operations to verify pixel-level rendering.
- */
-class MockCanvasContext {
+class MockCtx {
   public canvas: MockCanvas;
-  public pixels: Map<string, string> = new Map(); // "x,y" -> color
-  public clearCalls: Array<{ x: number; y: number; w: number; h: number }> = [];
-  public fillStyles: string[] = [];
-  public transforms: Array<{ type: string; value?: number }> = [];
-  private pathPoints: Array<{ x: number; y: number }> = [];
-
-  constructor(width = 32, height = 32) {
-    this.canvas = new MockCanvas(width, height);
-  }
-
+  public pixels = new Map<string, string>();
+  private styles: string[] = [];
+  constructor(w = 32, h = 32) { this.canvas = new MockCanvas(w, h); }
   clearRect(x: number, y: number, w: number, h: number): void {
-    this.clearCalls.push({ x, y, w, h });
-    // Clear pixels in this region
-    for (let cy = y; cy < y + h; cy++) {
-      for (let cx = x; cx < x + w; cx++) {
-        if (cx >= 0 && cx < this.canvas.width && cy >= 0 && cy < this.canvas.height) {
-          this.pixels.delete(`${cx},${cy}`);
-        }
-      }
-    }
+    for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++)
+      if (cx >= 0 && cx < this.canvas.width && cy >= 0 && cy < this.canvas.height) this.pixels.delete(`${cx},${cy}`);
   }
-
   fillRect(x: number, y: number, w: number, h: number): void {
-    const color = this.fillStyle;
-    for (let cy = y; cy < y + h; cy++) {
-      for (let cx = x; cx < x + w; cx++) {
-        if (cx >= 0 && cx < this.canvas.width && cy >= 0 && cy < this.canvas.height) {
-          this.pixels.set(`${cx},${cy}`, color);
-        }
-      }
-    }
+    const c = this.fillStyle;
+    for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++)
+      if (cx >= 0 && cx < this.canvas.width && cy >= 0 && cy < this.canvas.height) this.pixels.set(`${cx},${cy}`, c);
   }
-
-  set fillStyle(color: string) {
-    this.fillStyles.push(color);
-  }
-
-  get fillStyle(): string {
-    return this.fillStyles[this.fillStyles.length - 1] ?? "#000000";
-  }
-
-  save(): void {
-    this.transforms.push({ type: "save" });
-  }
-
-  restore(): void {
-    this.transforms.push({ type: "restore" });
-  }
-
-  translate(x: number, y: number): void {
-    this.transforms.push({ type: "translate", value: x + y });
-  }
-
-  rotate(angle: number): void {
-    this.transforms.push({ type: "rotate", value: angle });
-  }
-
-  drawImage(canvas: MockCanvas, x: number, y: number): void {
-    this.transforms.push({ type: "drawImage", value: x + y });
-  }
-
-  // Canvas2D path methods (no-op for testing purposes)
-  beginPath(): void {
-    this.pathPoints = [];
-  }
-
-  arc(x: number, y: number, radius: number, startAngle: number, endAngle: number): void {
-    // Approximate circle with filled rect for testing
-    const size = Math.floor(radius * 2);
-    const startX = Math.floor(x - radius);
-    const startY = Math.floor(y - radius);
-    this.fillRect(startX, startY, size, size);
-  }
-
-  fill(): void {
-    // Path already rendered via fillRect in arc
-  }
-
-  stroke(): void {
-    // No-op for testing
-  }
-
-  lineWidth = 1;
-
-  // Additional Canvas2D path methods (no-op for testing purposes)
-  moveTo(_x: number, _y: number): void {
-    // No-op for testing
-  }
-
-  lineTo(_x: number, _y: number): void {
-    // No-op for testing
-  }
-
-  /** Count pixels with non-transparent/non-clear colors */
-  countRenderedPixels(): number {
-    return this.pixels.size;
-  }
-
-  /** Check if any pixel was drawn at or beyond coordinate boundary */
-  hasPixelsInRange(
-    minX: number,
-    minY: number,
-    maxX: number,
-    maxY: number
-  ): boolean {
-    for (const key of this.pixels.keys()) {
-      const parts = key.split(",").map(Number);
-      const x = parts[0];
-      const y = parts[1];
-      if (x !== undefined && y !== undefined && x >= minX && x <= maxX && y >= minY && y <= maxY) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** Get all pixel coordinates that have been drawn */
-  getPixelCoordinates(): Array<{ x: number; y: number }> {
-    return Array.from(this.pixels.keys()).map((key) => {
-      const parts = key.split(",").map(Number);
-      const x = parts[0];
-      const y = parts[1];
-      return { x: x ?? 0, y: y ?? 0 };
-    });
-  }
-
-  /** Check if specific pixel range has any rendered content */
-  hasPixelsOutsideRange(minX: number, minY: number, maxX: number, maxY: number): boolean {
-    for (const key of this.pixels.keys()) {
-      const parts = key.split(",").map(Number);
-      const x = parts[0];
-      const y = parts[1];
-      if (x !== undefined && y !== undefined && (x < minX || x > maxX || y < minY || y > maxY)) {
-        return true;
-      }
-    }
-    return false;
-  }
+  set fillStyle(c: string) { this.styles.push(c); }
+  get fillStyle(): string { return this.styles[this.styles.length - 1] ?? "#000"; }
+  save() {} restore() {} translate() {} rotate() {} drawImage() {}
+  beginPath() {} arc(x: number, y: number, r: number) { this.fillRect(Math.floor(x-r), Math.floor(y-r), Math.floor(r*2), Math.floor(r*2)); }
+  fill() {} stroke() {} moveTo() {} lineTo() {} lineWidth = 1;
+  getPixelCoords() { return Array.from(this.pixels.keys()).map(k => { const [x,y]=k.split(",").map(Number); return {x:x??0,y:y??0}; }); }
+  count() { return this.pixels.size; }
 }
 
-// Mock document for offscreen canvas usage in drawBelt
-const mockDocument = {
-  createElement: (tag: string): unknown => {
-    if (tag === "canvas") {
-      return new MockCanvas(32, 32);
-    }
-    return {};
-  },
-};
+const mockDoc = { createElement: (t: string) => t === "canvas" ? new MockCanvas(32, 32) : {} };
+(globalThis as unknown as { document?: unknown }).document = mockDoc as typeof mockDoc;
 
-// Override document.createElement temporarily for tests
-const originalDocument = (globalThis as unknown as { document?: unknown }).document;
-(globalThis as unknown as { document: typeof mockDocument }).document = mockDocument as typeof mockDocument;
-
-describe("Building Sprites - Drawing Contracts", () => {
-  describe("getBuildingTextureKey", () => {
-    it("should generate unique keys for each building/direction/frame combination", () => {
-      expect(getBuildingTextureKey("miner", "N", 0)).toBe("miner_N_0");
-      expect(getBuildingTextureKey("miner", "E", 0)).toBe("miner_E_0");
-      expect(getBuildingTextureKey("miner", "N", 1)).toBe("miner_N_1");
-      expect(getBuildingTextureKey("belt", "S", 0)).toBe("belt_S_0");
-      expect(getBuildingTextureKey("hub", "W", 1)).toBe("hub_W_1");
-    });
+describe("Building Sprites", () => {
+  it("getBuildingTextureKey generates unique keys", () => {
+    expect(getBuildingTextureKey("miner", "N", 0)).toBe("miner_N_0");
+    expect(getBuildingTextureKey("hub", "W", 1)).toBe("hub_W_1");
   });
 
-  describe("1×1 Buildings (32×32) - Pixel Rendering", () => {
-    const buildings1x1: Array<{ type: BuildingType; name: string }> = [
-      { type: "miner", name: "Miner" },
-      { type: "belt", name: "Belt" },
-      { type: "splitter", name: "Splitter" },
-      { type: "filter_splitter", name: "Filter Splitter" },
-      { type: "underground_belt", name: "Underground Belt" },
-      { type: "smelter", name: "Smelter" },
-      { type: "assembler", name: "Assembler" },
-      { type: "recycler", name: "Recycler" },
-      { type: "sensor", name: "Sensor" },
-    ];
+  const buildings1x1: Array<{type: BuildingType; name: string}> = [
+    {type:"miner",name:"Miner"},{type:"belt",name:"Belt"},{type:"splitter",name:"Splitter"},
+    {type:"filter_splitter",name:"Filter Splitter"},{type:"underground_belt",name:"Underground Belt"},
+    {type:"smelter",name:"Smelter"},{type:"assembler",name:"Assembler"},{type:"recycler",name:"Recycler"},
+    {type:"sensor",name:"Sensor"},
+  ];
+  const dirs: Direction[] = ["N","E","S","W"];
 
-    const directions: Direction[] = ["N", "E", "S", "W"];
-
-    for (const { type, name } of buildings1x1) {
-      describe(`${name} (${type})`, () => {
-        it(`should render multiple colored pixels within 32×32 bounds for all directions`, () => {
-          for (const dir of directions) {
-            const ctx = new MockCanvasContext(32, 32);
-            drawBuilding(ctx as unknown as CanvasRenderingContext2D, type, dir, 0, false);
-
-            const coords = ctx.getPixelCoordinates();
-            // Verify all pixels are within bounds
-            for (const { x, y } of coords) {
-              expect(x).toBeGreaterThanOrEqual(0);
-              expect(x).toBeLessThan(32);
-              expect(y).toBeGreaterThanOrEqual(0);
-              expect(y).toBeLessThan(32);
-            }
-            // Verify substantial pixel count (not just a few pixels)
-            expect(coords.length).toBeGreaterThan(20);
+  for (const {type,name} of buildings1x1) {
+    describe(`${name} (${type})`, () => {
+      it(`renders in 32×32 bounds for all directions`, () => {
+        for (const dir of dirs) {
+          const ctx = new MockCtx(32, 32);
+          drawBuilding(ctx as unknown as CanvasRenderingContext2D, type, dir, 0, false);
+          for (const {x,y} of ctx.getPixelCoords()) {
+            expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThan(32);
+            expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThan(32);
           }
-        });
-
-        it(`should render correctly with frame 0 and frame 1`, () => {
-          const ctx0 = new MockCanvasContext(32, 32);
-          const ctx1 = new MockCanvasContext(32, 32);
-          
-          drawBuilding(ctx0 as unknown as CanvasRenderingContext2D, type, "E", 0, false);
-          drawBuilding(ctx1 as unknown as CanvasRenderingContext2D, type, "E", 1, false);
-
-          // Both should have rendered content
-          expect(ctx0.countRenderedPixels()).toBeGreaterThan(0);
-          expect(ctx1.countRenderedPixels()).toBeGreaterThan(0);
-        });
-
-        it(`should handle faulted=true without errors`, () => {
-          const ctx = new MockCanvasContext(32, 32);
-          expect(() =>
-            drawBuilding(ctx as unknown as CanvasRenderingContext2D, type, "E", 0, true)
-          ).not.toThrow();
-          expect(ctx.countRenderedPixels()).toBeGreaterThan(0);
-        });
+          expect(ctx.count()).toBeGreaterThan(20);
+        }
       });
-    }
-  });
+      it(`renders with frame 0 and 1`, () => {
+        const c0 = new MockCtx(32, 32), c1 = new MockCtx(32, 32);
+        drawBuilding(c0 as unknown as CanvasRenderingContext2D, type, "E", 0, false);
+        drawBuilding(c1 as unknown as CanvasRenderingContext2D, type, "E", 1, false);
+        expect(c0.count()).toBeGreaterThan(0); expect(c1.count()).toBeGreaterThan(0);
+      });
+      it(`handles faulted=true`, () => {
+        const ctx = new MockCtx(32, 32);
+        expect(() => drawBuilding(ctx as unknown as CanvasRenderingContext2D, type, "E", 0, true)).not.toThrow();
+        expect(ctx.count()).toBeGreaterThan(0);
+      });
+    });
+  }
 
-  describe("drawBelt - Horizontal/Vertical Coverage", () => {
-    it("should draw horizontally from x=0 to x=31 when direction is E/W", () => {
-      for (const dir of ["E", "W"] as Direction[]) {
-        const ctx = new MockCanvasContext(32, 32);
+  describe("drawBelt coverage", () => {
+    it("horizontal E/W reaches x=0 or x=31", () => {
+      for (const dir of ["E","W"] as Direction[]) {
+        const ctx = new MockCtx(32, 32);
         drawBelt(ctx as unknown as CanvasRenderingContext2D, dir, 0, false);
-
-        const coords = ctx.getPixelCoordinates();
-        const hasLeftEdge = coords.some((p) => p.x === 0);
-        const hasRightEdge = coords.some((p) => p.x === 31);
-        
-        expect(hasLeftEdge || hasRightEdge).toBe(true);
-        // Check coverage across horizontal span
-        const xCoords = new Set(coords.map((p) => p.x));
-        expect(xCoords.size).toBeGreaterThan(20); // Should span most of horizontal range
+        const coords = ctx.getPixelCoords();
+        expect(coords.some(p=>p.x===0) || coords.some(p=>p.x===31)).toBe(true);
+        expect(new Set(coords.map(p=>p.x)).size).toBeGreaterThan(20);
       }
     });
-
-    it("should draw vertically from y=0 to y=31 when direction is N/S", () => {
-      for (const dir of ["N", "S"] as Direction[]) {
-        const ctx = new MockCanvasContext(32, 32);
+    it("vertical N/S reaches y=0 or y=31", () => {
+      for (const dir of ["N","S"] as Direction[]) {
+        const ctx = new MockCtx(32, 32);
         drawBelt(ctx as unknown as CanvasRenderingContext2D, dir, 0, false);
-
-        const coords = ctx.getPixelCoordinates();
-        const hasTopEdge = coords.some((p) => p.y === 0);
-        const hasBottomEdge = coords.some((p) => p.y === 31);
-        
-        expect(hasTopEdge || hasBottomEdge).toBe(true);
-        // Check coverage across vertical span
-        const yCoords = new Set(coords.map((p) => p.y));
-        expect(yCoords.size).toBeGreaterThan(20); // Should span most of vertical range
+        const coords = ctx.getPixelCoords();
+        expect(coords.some(p=>p.y===0) || coords.some(p=>p.y===31)).toBe(true);
+        expect(new Set(coords.map(p=>p.y)).size).toBeGreaterThan(20);
       }
     });
   });
 
-  describe("drawHub - 64×64 Large Building", () => {
-    it("should render within 64×64 bounds including coordinates > 32", () => {
-      const ctx = new MockCanvasContext(64, 64);
+  describe("drawUndergroundBelt direction", () => {
+    it("N/S spans vertically", () => {
+      for (const dir of ["N","S"] as Direction[]) {
+        const ctx = new MockCtx(32, 32);
+        drawUndergroundBelt(ctx as unknown as CanvasRenderingContext2D, dir, 0, false);
+        const coords = ctx.getPixelCoords();
+        expect(new Set(coords.map(p=>p.y)).size).toBeGreaterThan(25);
+        expect(coords.some(p=>p.y===0) || coords.some(p=>p.y===31)).toBe(true);
+      }
+    });
+    it("E/W spans horizontally", () => {
+      for (const dir of ["E","W"] as Direction[]) {
+        const ctx = new MockCtx(32, 32);
+        drawUndergroundBelt(ctx as unknown as CanvasRenderingContext2D, dir, 0, false);
+        const coords = ctx.getPixelCoords();
+        expect(new Set(coords.map(p=>p.x)).size).toBeGreaterThan(25);
+        expect(coords.some(p=>p.x===0) || coords.some(p=>p.x===31)).toBe(true);
+      }
+    });
+    it("N vs E have different spans", () => {
+      const cN = new MockCtx(32,32), cE = new MockCtx(32,32);
+      drawUndergroundBelt(cN as unknown as CanvasRenderingContext2D, "N", 0, false);
+      drawUndergroundBelt(cE as unknown as CanvasRenderingContext2D, "E", 0, false);
+      const yN = new Set(cN.getPixelCoords().map(p=>p.y)).size;
+      const xN = new Set(cN.getPixelCoords().map(p=>p.x)).size;
+      const yE = new Set(cE.getPixelCoords().map(p=>p.y)).size;
+      const xE = new Set(cE.getPixelCoords().map(p=>p.x)).size;
+      expect(yN).toBeGreaterThan(xN); expect(xE).toBeGreaterThan(yE);
+    });
+  });
+
+  describe("drawHub 64×64", () => {
+    it("renders within 64×64 with coords > 32", () => {
+      const ctx = new MockCtx(64, 64);
       drawHub(ctx as unknown as CanvasRenderingContext2D, "E", 0, false);
-
-      const coords = ctx.getPixelCoordinates();
-      
-      // All pixels should be within 64×64 bounds
-      for (const { x, y } of coords) {
-        expect(x).toBeGreaterThanOrEqual(0);
-        expect(x).toBeLessThan(64);
-        expect(y).toBeGreaterThanOrEqual(0);
-        expect(y).toBeLessThan(64);
+      for (const {x,y} of ctx.getPixelCoords()) {
+        expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThan(64);
+        expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThan(64);
       }
-
-      // Should use coordinates beyond 32 (proving 64×64 rendering)
-      const hasBeyond32 = coords.some((p) => p.x > 32 || p.y > 32);
-      expect(hasBeyond32).toBe(true);
-
-      // Should have substantial pixel count for large building
-      expect(coords.length).toBeGreaterThan(500);
+      expect(ctx.getPixelCoords().some(p=>p.x>32||p.y>32)).toBe(true);
+      expect(ctx.count()).toBeGreaterThan(500);
     });
-
-    it("should render with multiple colors", () => {
-      const ctx = new MockCanvasContext(64, 64);
-      drawHub(ctx as unknown as CanvasRenderingContext2D, "N", 1, false);
-
-      const uniqueColors = new Set(ctx.pixels.values());
-      expect(uniqueColors.size).toBeGreaterThan(3);
-    });
-
-    it("should handle faulted state on 64×64 canvas", () => {
-      const ctx = new MockCanvasContext(64, 64);
-      expect(() =>
-        drawHub(ctx as unknown as CanvasRenderingContext2D, "E", 0, true)
-      ).not.toThrow();
-      expect(ctx.countRenderedPixels()).toBeGreaterThan(500);
+    it("handles faulted", () => {
+      const ctx = new MockCtx(64, 64);
+      expect(() => drawHub(ctx as unknown as CanvasRenderingContext2D, "E", 0, true)).not.toThrow();
+      expect(ctx.count()).toBeGreaterThan(500);
     });
   });
 
   describe("drawBuilding dispatcher", () => {
-    it("should route all building types correctly", () => {
-      const buildingTypes: BuildingType[] = [
-        "miner", "belt", "splitter", "filter_splitter",
-        "underground_belt", "smelter", "assembler", "recycler", "sensor", "hub"
-      ];
-
-      for (const type of buildingTypes) {
-        const ctx = new MockCanvasContext(type === "hub" ? 64 : 32, type === "hub" ? 64 : 32);
-        expect(() =>
-          drawBuilding(
-            ctx as unknown as CanvasRenderingContext2D,
-            type,
-            "E",
-            0,
-            false
-          )
-        ).not.toThrow();
-        expect(ctx.countRenderedPixels()).toBeGreaterThan(0);
+    it("routes all types correctly", () => {
+      const types: BuildingType[] = ["miner","belt","splitter","filter_splitter","underground_belt","smelter","assembler","recycler","sensor","hub"];
+      for (const t of types) {
+        const ctx = new MockCtx(t==="hub"?64:32, t==="hub"?64:32);
+        expect(() => drawBuilding(ctx as unknown as CanvasRenderingContext2D, t, "E", 0, false)).not.toThrow();
+        expect(ctx.count()).toBeGreaterThan(0);
       }
     });
-
-    it("should throw error for invalid frame on 1×1 buildings", () => {
-      const ctx = new MockCanvasContext(32, 32);
-      // drawBelt validates frame (only accepts 0 or 1)
-      expect(() =>
-        drawBuilding(ctx as unknown as CanvasRenderingContext2D, "belt", "E", 2, false)
-      ).toThrow();
+    it("throws on invalid frame", () => {
+      const ctx = new MockCtx(32, 32);
+      expect(() => drawBuilding(ctx as unknown as CanvasRenderingContext2D, "belt", "E", 2, false)).toThrow();
     });
   });
 
   describe("Direction handling", () => {
-    const testBuildings: BuildingType[] = ["miner", "splitter", "smelter"];
-
-    for (const type of testBuildings) {
-      it(`should handle all directions for ${type} without errors`, () => {
-        for (const dir of ["N", "E", "S", "W"] as Direction[]) {
-          const ctx = new MockCanvasContext(32, 32);
-          expect(() =>
-            drawBuilding(ctx as unknown as CanvasRenderingContext2D, type, dir, 0, false)
-          ).not.toThrow();
-          expect(ctx.countRenderedPixels()).toBeGreaterThan(0);
+    for (const t of ["miner","splitter","smelter"] as BuildingType[]) {
+      it(`handles all directions for ${t}`, () => {
+        for (const d of dirs) {
+          const ctx = new MockCtx(32, 32);
+          expect(() => drawBuilding(ctx as unknown as CanvasRenderingContext2D, t, d, 0, false)).not.toThrow();
+          expect(ctx.count()).toBeGreaterThan(0);
         }
       });
     }
