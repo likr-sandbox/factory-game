@@ -4,6 +4,16 @@
 import type { MaterialId, BuildingType, RecipeId } from "./types";
 
 // ============================================================================
+// Balance Constants
+// ============================================================================
+
+export const MINING_INTERVAL = 60;
+export const BELT_MOVE_INTERVAL = 10;
+export const MAX_OUTPUT_BUFFER = 10;
+export const MIN_INPUT_BUFFER_PER_MATERIAL = 6;
+export const INPUT_BUFFER_MULTIPLIER = 3;
+
+// ============================================================================
 // Material Catalog
 // ============================================================================
 
@@ -95,7 +105,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "smelter",
     inputs: { iron_ore: 3 },
     outputs: { iron_plate: 2 },
-    craftTicks: 90,
+    craftTicks: 75,
     unlockedByDefault: false,
     slagChance: 0.15,
   },
@@ -105,7 +115,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "smelter",
     inputs: { copper_ore: 3 },
     outputs: { copper_plate: 2 },
-    craftTicks: 90,
+    craftTicks: 75,
     unlockedByDefault: false,
     slagChance: 0.15,
   },
@@ -115,7 +125,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "assembler",
     inputs: { iron_plate: 2 },
     outputs: { iron_gear: 1 },
-    craftTicks: 90,
+    craftTicks: 60,
     unlockedByDefault: true,
   },
   copper_wire: {
@@ -153,7 +163,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "assembler",
     inputs: { iron_plate: 1, copper_wire: 3 },
     outputs: { circuit_board: 1 },
-    craftTicks: 120,
+    craftTicks: 90,
     unlockedByDefault: false,
   },
   microchip: {
@@ -162,7 +172,7 @@ export const RECIPE_CATALOG: Record<RecipeId, RecipeEntry> = {
     building: "assembler",
     inputs: { circuit_board: 1, silicon_wafer: 2, copper_wire: 2 },
     outputs: { microchip: 1 },
-    craftTicks: 180,
+    craftTicks: 240,
     unlockedByDefault: false,
   },
   automation_module: {
