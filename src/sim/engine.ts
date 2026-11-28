@@ -8,6 +8,7 @@ import { processFilterSplitters, processRecyclers, processUndergroundBelts, upda
 import { awardResearchPoints, getCurrentTutorialStep, completeTutorialStep, getTutorialStepsForPhase, type TutorialPhase } from "./progression";
 import { updateQuestProgress, processQuests } from "./quests";
 import { updateSpmStats } from "./stats";
+import { TICKS_PER_MINUTE } from "./constants";
 
 const MINING_INTERVAL = 60; // ticks between mining operations
 const MAX_OUTPUT_BUFFER = 10; // max items in output buffer
@@ -260,7 +261,7 @@ function processHubs(world: WorldState): void {
       // Clear the input buffer
       building.inputBuffer[matKey] = 0;
 
-      // Prune old history entries (older than 600 ticks)
+      // Prune delivery history older than one minute (TICKS_PER_MINUTE = 3600 ticks)
       pruneDeliveryHistory(world);
     }
   }
@@ -438,10 +439,10 @@ function trySendToDirection(world: WorldState, building: BuildingState, material
 }
 
 /**
- * Helper: prune old delivery history entries
+ * Helper: prune delivery history entries older than one minute (TICKS_PER_MINUTE)
  */
 function pruneDeliveryHistory(world: WorldState): void {
-  const cutoff = world.tick - 600;
+  const cutoff = world.tick - TICKS_PER_MINUTE;
   world.deliveryHistory = world.deliveryHistory.filter(entry => entry.tick >= cutoff);
 }
 
