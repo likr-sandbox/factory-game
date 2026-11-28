@@ -1,4 +1,4 @@
-// HUD UI for Japanese top status bar
+// HUD UI for Japanese slim top bar with collapsible Tech Tree and Seed popovers
 // Pure TypeScript - DOM elements via container.ownerDocument only
 
 import type { WorldState, MaterialId } from "../sim/types";
@@ -37,20 +37,15 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
     throw new Error("Container must have an ownerDocument");
   }
 
-  // Create HUD elements
+  // Create HUD container
   const hudEl = doc.createElement("div");
   hudEl.className = "hud-bar";
-  hudEl.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%";
+  hudEl.style.cssText = "display:flex;flex-wrap:nowrap;align-items:center;gap:8px;width:100%;height:100%";
 
   // SPM display
   const spmEl = doc.createElement("span");
   spmEl.className = "hud-item spm-display";
-  spmEl.textContent = "生産速度/分：--";
-
-  // Tick display
-  const tickEl = doc.createElement("span");
-  tickEl.className = "hud-item tick-display";
-  tickEl.textContent = "ティック：0";
+  spmEl.textContent = "SPM:--";
 
   // Speed controls
   const speedControlsEl = doc.createElement("span");
@@ -105,40 +100,58 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
   countEl.className = "hud-item building-counts";
   countEl.textContent = "稼働/故障：0 / 0";
 
-  // Delivered resource counters
-  const deliveredEl = doc.createElement("span");
-  deliveredEl.className = "hud-item delivered-counters";
-  deliveredEl.textContent = "納入数：--";
-
   // Research points display
   const rpEl = doc.createElement("span");
   rpEl.className = "hud-item research-points";
-  rpEl.textContent = "研究ポイント：0";
+  rpEl.textContent = "RP:0";
 
   // Tutorial progress display
   const tutorialEl = doc.createElement("span");
   tutorialEl.className = "hud-item tutorial-display";
-  tutorialEl.textContent = "チュートリアル：--";
+  tutorialEl.textContent = "チュートリアル：未開始";
 
-  // Tech tree container (will be populated with 8 tech buttons in mountHud)
-  const techTreeEl = doc.createElement("span");
-  techTreeEl.className = "hud-item tech-tree";
-  techTreeEl.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;align-items:center";
-
-  // Active quests display
+  // Quests display
   const questsEl = doc.createElement("span");
   questsEl.className = "hud-item quests-display";
   questsEl.textContent = "クエスト：なし";
 
-  // Seed reset controls
-  const seedResetEl = doc.createElement("span");
-  seedResetEl.className = "hud-item seed-reset";
+  // Tech toggle button
+  const techToggleBtn = doc.createElement("button");
+  techToggleBtn.className = "tech-toggle-btn";
+  techToggleBtn.textContent = "研究";
+  techToggleBtn.setAttribute("aria-expanded", "false");
+  techToggleBtn.title = "研究ツリーを開く";
+
+  // Tech badge for unlockable count
+  const techBadge = doc.createElement("span");
+  techBadge.className = "tech-badge";
+  techBadge.style.display = "none";
+  techBadge.textContent = "0";
+
+  techToggleBtn.appendChild(techBadge);
+
+  // Tech drawer (popover)
+  const techDrawerEl = doc.createElement("div");
+  techDrawerEl.className = "tech-drawer hud-popover";
+  techDrawerEl.style.display = "none";
+  techDrawerEl.setAttribute("aria-hidden", "true");
+
+  // Seed toggle button
+  const seedToggleBtn = doc.createElement("button");
+  seedToggleBtn.className = "seed-toggle-btn";
+  seedToggleBtn.textContent = "シード";
+  seedToggleBtn.title = "シードリセット";
+
+  // Seed popover
+  const seedPopoverEl = doc.createElement("div");
+  seedPopoverEl.className = "seed-popover hud-popover";
+  seedPopoverEl.style.display = "none";
+  seedPopoverEl.setAttribute("aria-hidden", "true");
 
   const seedInput = doc.createElement("input");
   seedInput.type = "number";
   seedInput.className = "seed-input";
   seedInput.placeholder = "シード値";
-  seedInput.style.width = "80px";
 
   const resetBtn = doc.createElement("button");
   resetBtn.className = "reset-btn";
@@ -159,20 +172,19 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
     options.onResetWorld?.(randomSeed);
   });
 
-  seedResetEl.appendChild(seedInput);
-  seedResetEl.appendChild(resetBtn);
-  seedResetEl.appendChild(randomBtn);
+  seedPopoverEl.appendChild(seedInput);
+  seedPopoverEl.appendChild(resetBtn);
+  seedPopoverEl.appendChild(randomBtn);
 
+  // Append to HUD bar
   hudEl.appendChild(spmEl);
-  hudEl.appendChild(tickEl);
   hudEl.appendChild(speedControlsEl);
   hudEl.appendChild(countEl);
-  hudEl.appendChild(deliveredEl);
   hudEl.appendChild(rpEl);
   hudEl.appendChild(tutorialEl);
-  hudEl.appendChild(techTreeEl);
   hudEl.appendChild(questsEl);
-  hudEl.appendChild(seedResetEl);
+  hudEl.appendChild(techToggleBtn);
+  hudEl.appendChild(seedToggleBtn);
 
   container.appendChild(hudEl);
 
@@ -187,10 +199,16 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
       options.onUnlockTech?.(techId as keyof typeof TECH_CATALOG);
     });
     techButtonMap[techId] = { btn };
-    techTreeEl.appendChild(btn);
+    techDrawerEl.appendChild(btn);
   }
 
+  // Append popovers to container (absolute positioned)
+  container.appendChild(techDrawerEl);
+  container.appendChild(seedPopoverEl);
+
   let currentSpeed: SpeedValue = 1;
+  let isTechDrawerOpen = false;
+  let isSeedPopoverOpen = false;
 
   function setActiveSpeedButton(parent: HTMLElement, speed: SpeedValue): void {
     const buttons = parent.querySelectorAll(".speed-btn");
@@ -203,49 +221,68 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
     });
   }
 
+  function countUnlockableTechs(world: WorldState): number {
+    const unlockedTechs = new Set(world.unlockedTechs || []);
+    let count = 0;
+    for (const [techId, tech] of Object.entries(TECH_CATALOG)) {
+      if (!unlockedTechs.has(techId) && (world.researchPoints ?? 0) >= tech.cost) {
+        // Check prerequisites - only count if all prereqs are met
+        const missingPrereqs = getMissingPrerequisites(world, techId as TechId);
+        if (missingPrereqs.length === 0) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  // Toggle handlers
+  techToggleBtn.addEventListener("click", () => {
+    isTechDrawerOpen = !isTechDrawerOpen;
+    techDrawerEl.style.display = isTechDrawerOpen ? "" : "none";
+    techDrawerEl.setAttribute("aria-hidden", isTechDrawerOpen ? "false" : "true");
+    techToggleBtn.setAttribute("aria-expanded", isTechDrawerOpen ? "true" : "false");
+    
+    // Close seed popover if open
+    if (isSeedPopoverOpen) {
+      isSeedPopoverOpen = false;
+      seedPopoverEl.style.display = "none";
+      seedPopoverEl.setAttribute("aria-hidden", "true");
+      seedToggleBtn.classList.remove("active");
+    }
+    
+    techToggleBtn.classList.toggle("active", isTechDrawerOpen);
+  });
+
+  seedToggleBtn.addEventListener("click", () => {
+    isSeedPopoverOpen = !isSeedPopoverOpen;
+    seedPopoverEl.style.display = isSeedPopoverOpen ? "" : "none";
+    seedPopoverEl.setAttribute("aria-hidden", isSeedPopoverOpen ? "false" : "true");
+    
+    // Close tech drawer if open
+    if (isTechDrawerOpen) {
+      isTechDrawerOpen = false;
+      techDrawerEl.style.display = "none";
+      techDrawerEl.setAttribute("aria-hidden", "true");
+      techToggleBtn.setAttribute("aria-expanded", "false");
+      techToggleBtn.classList.remove("active");
+    }
+    
+    seedToggleBtn.classList.toggle("active", isSeedPopoverOpen);
+  });
+
   return {
     update(world: WorldState): void {
       const summary = getFactorySummary(world);
 
       // Update SPM
-      spmEl.textContent = `生産速度/分：${summary.spm}`;
-
-      // Update tick
-      tickEl.textContent = `ティック：${summary.tick}`;
+      spmEl.textContent = `SPM:${summary.spm}`;
 
       // Update building counts
       countEl.textContent = `稼働/故障：${summary.activeCount} / ${summary.faultedCount}`;
 
-      // Update delivered counters - show key materials including mid-game items with delivered > 0
-      const keyMaterials: Array<{ id: string; label: string }> = [
-        { id: "iron_plate", label: "鉄板" },
-        { id: "copper_plate", label: "銅板" },
-        { id: "iron_gear", label: "鉄歯車" },
-        { id: "copper_wire", label: "銅線" },
-      ];
-      const deliveredParts: string[] = [];
-      for (const m of keyMaterials) {
-        const amount = summary.delivered[m.id as keyof typeof summary.delivered] ?? 0;
-        deliveredParts.push(`${m.label}:${amount}`);
-      }
-      // Add mid-game materials with delivered > 0
-      const midGameMaterials: Array<{ id: string; label: string }> = [
-        { id: "steel_plate", label: "鋼板" },
-        { id: "silicon_wafer", label: "シリコンウェハ" },
-        { id: "circuit_board", label: "電子基板" },
-        { id: "microchip", label: "マイクロチップ" },
-        { id: "automation_module", label: "自動化モジュール" },
-      ];
-      for (const m of midGameMaterials) {
-        const amount = summary.delivered[m.id as keyof typeof summary.delivered] ?? 0;
-        if (amount > 0) {
-          deliveredParts.push(`${m.label}:${amount}`);
-        }
-      }
-      deliveredEl.textContent = `納入数：${deliveredParts.join(", ")}`;
-
       // Update research points
-      rpEl.textContent = `研究ポイント：${summary.researchPoints}`;
+      rpEl.textContent = `RP:${summary.researchPoints}`;
 
       // Update tutorial progress
       const tutorialProg = getTutorialProgress(world);
@@ -269,10 +306,11 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
       const allUnlocked = Object.keys(TECH_CATALOG).every(techId => unlockedTechs.has(techId));
       
       if (allUnlocked) {
-        // All techs unlocked - hide the tech tree container
-        techTreeEl.style.display = "none";
+        // All techs unlocked - hide the tech drawer
+        techDrawerEl.style.display = "none";
+        techToggleBtn.style.display = "none";
       } else {
-        techTreeEl.style.display = "";
+        techToggleBtn.style.display = "";
         // Non-destructive update: disable buttons and update labels/costs
         
         // Update each tech button
@@ -316,6 +354,17 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
         for (const techId of Object.keys(TECH_CATALOG)) {
           updateTechBtn(techId);
         }
+
+        // Update unlockable badge
+        const unlockableCount = countUnlockableTechs(world);
+        if (unlockableCount > 0 && !allUnlocked) {
+          techBadge.textContent = String(unlockableCount);
+          techBadge.style.display = "";
+          techToggleBtn.classList.add("has-unlockable");
+        } else {
+          techBadge.style.display = "none";
+          techToggleBtn.classList.remove("has-unlockable");
+        }
       }
 
       // Update active quests with material names from MATERIAL_CATALOG
@@ -343,6 +392,12 @@ export function mountHud(container: HTMLElement, options: HudOptions = {}): HudH
     destroy(): void {
       if (hudEl.parentNode === container) {
         container.removeChild(hudEl);
+      }
+      if (techDrawerEl.parentNode === container) {
+        container.removeChild(techDrawerEl);
+      }
+      if (seedPopoverEl.parentNode === container) {
+        container.removeChild(seedPopoverEl);
       }
     },
   };
