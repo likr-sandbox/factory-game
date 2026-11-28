@@ -52,14 +52,14 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
   inspect_region: {
     name: "inspect_region",
     description:
-      "Inspect a rectangular region of the world, returning terrain, buildings, and resources within the bounds.",
+      "Inspect a rectangular region of the world, returning terrain, buildings, and resources within the bounds. Parameters x, y, width, height must be integers. Maximum region size is 24×24.",
     inputSchema: {
       type: "object",
       properties: {
-        x: { type: "number", description: "Top-left X coordinate of the region" },
-        y: { type: "number", description: "Top-left Y coordinate of the region" },
-        width: { type: "number", description: "Width of the region" },
-        height: { type: "number", description: "Height of the region" },
+        x: { type: "number", description: "Top-left X coordinate (integer)" },
+        y: { type: "number", description: "Top-left Y coordinate (integer)" },
+        width: { type: "number", description: "Width of the region (integer, <= 24)" },
+        height: { type: "number", description: "Height of the region (integer, <= 24)" },
       },
       required: ["x", "y", "width", "height"],
       additionalProperties: false,
@@ -68,13 +68,13 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
   find_resources: {
     name: "find_resources",
     description:
-      "Find all resource deposits, optionally filtered by material type, availability, and result limit.",
+      "Find all resource deposits, optionally filtered by material type, availability, and result limit. limit must be a positive integer if provided.",
     inputSchema: {
       type: "object",
       properties: {
         material: { type: "string", enum: ["iron_ore", "copper_ore", "coal", "silica_sand", "iron_plate", "copper_plate", "iron_gear", "copper_wire", "steel_plate", "silicon_wafer", "circuit_board", "microchip", "automation_module", "slag"], description: "Filter by material type" },
         onlyAvailable: { type: "boolean", description: "Only return deposits with remaining > 0 (default: true)" },
-        limit: { type: "number", description: "Maximum number of results to return" },
+        limit: { type: "number", description: "Maximum number of results to return (positive integer)" },
       },
       required: [],
       additionalProperties: false,
@@ -96,11 +96,11 @@ export const TOOL_SCHEMAS: Record<WebMcpToolName, ToolSchema> = {
   get_metrics: {
     name: "get_metrics",
     description:
-      "Get production and efficiency metrics for the factory, including SPM and delivery statistics.",
+      "Get production and efficiency metrics for the factory, including SPM and delivery statistics. windowTicks must be a positive integer if provided.",
     inputSchema: {
       type: "object",
       properties: {
-        windowTicks: { type: "number", description: "Number of ticks to aggregate metrics over (default: 600)" },
+        windowTicks: { type: "number", description: "Number of ticks to aggregate metrics over (positive integer, default: 600)" },
       },
       required: [],
       additionalProperties: false,

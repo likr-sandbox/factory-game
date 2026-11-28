@@ -18,6 +18,11 @@ export function placeBuilding(
 ): ActionResult {
   const { x, y, type, direction, recipeId, filterMaterial } = input;
 
+  // Validate coordinates are integers
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isInteger(x) || !Number.isInteger(y)) {
+    return { success: false, error: { code: "INVALID_INPUT", message: `x and y must be integers`, details: { x, y } } };
+  }
+
   // Check bounds
   if (!inBounds(world, x, y)) {
     return { success: false, error: { code: "OUT_OF_BOUNDS", message: `Position (${x},${y}) is out of bounds`, details: { x, y } } };
@@ -33,6 +38,11 @@ export function placeBuilding(
   // Reject duplicate hub placement explicitly
   if (type === "hub") {
     return { success: false, error: { code: "HUB_PROTECTED", message: "Cannot place additional hub buildings", details: { x, y, type } } };
+  }
+
+  // Validate building type exists in catalog
+  if (!BUILDING_CATALOG[type]) {
+    return { success: false, error: { code: "INVALID_INPUT", message: `Unknown building type: ${type}`, details: { x, y, type } } };
   }
 
   // Check if already has a building
@@ -111,6 +121,12 @@ export function placeBeltLine(
   input: PlaceBeltLineInput
 ): ActionResult {
   const { startX, startY, endX, endY, cornerFirst = "x" } = input;
+
+  // Validate all coordinates are integers to prevent infinite loops
+  if (typeof startX !== "number" || typeof startY !== "number" || typeof endX !== "number" || typeof endY !== "number" ||
+      !Number.isInteger(startX) || !Number.isInteger(startY) || !Number.isInteger(endX) || !Number.isInteger(endY)) {
+    return { success: false, error: { code: "INVALID_INPUT", message: `startX, startY, endX, endY must be integers`, details: { startX, startY, endX, endY } } };
+  }
 
   // Compute L-shaped path using Manhattan distance
   const path: { x: number; y: number }[] = [];
@@ -257,6 +273,17 @@ export function removeArea(
   input: RemoveAreaInput
 ): ActionResult {
   const { x, y, width, height } = input;
+
+  // Validate coordinates and dimensions are non-negative integers
+  if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number" ||
+      !Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(width) || !Number.isInteger(height)) {
+    return { success: false, error: { code: "INVALID_INPUT", message: `x, y, width, height must be integers`, details: { x, y, width, height } } };
+  }
+
+  if (width < 0 || height < 0) {
+    return { success: false, error: { code: "INVALID_INPUT", message: `width and height must be >= 0`, details: { x, y, width, height } } };
+  }
+
   let removedCount = 0;
 
   for (let ty = y; ty < y + height; ty++) {
@@ -291,6 +318,11 @@ export function setRecipe(
   input: SetRecipeInput
 ): ActionResult {
   const { x, y, recipeId, filterMaterial, repair } = input;
+
+  // Validate coordinates are integers
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isInteger(x) || !Number.isInteger(y)) {
+    return { success: false, error: { code: "INVALID_INPUT", message: `x and y must be integers`, details: { x, y } } };
+  }
 
   if (!inBounds(world, x, y)) {
     return { success: false, error: { code: "OUT_OF_BOUNDS", message: `Position (${x},${y}) is out of bounds`, details: { x, y } } };
